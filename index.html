@@ -13,7 +13,7 @@
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background: var(--bg); margin: 0; padding: 15px; color: var(--text); overflow-x: hidden; }
         
-        /* PANTALLA DE CARGA */
+        /* PANTALLA DE CARGA BLINDADA */
         #splash-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--bg); display: flex; flex-direction: column;
@@ -98,6 +98,17 @@
     <div id="results" class="bus-list"></div>
 
     <script>
+        // --- 1. PROTECCIÓN DE PANTALLA DE CARGA (INDEPENDIENTE) ---
+        // Esto se ejecutará sí o sí, incluso si todo lo demás falla
+        setTimeout(() => {
+            const splash = document.getElementById('splash-screen');
+            if(splash) {
+                splash.style.opacity = '0';
+                setTimeout(() => splash.style.display = 'none', 500);
+            }
+        }, 2500);
+
+        // --- 2. VARIABLES GLOBALES ---
         const APP_ID = 'f87364db';
         const APP_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
         
@@ -112,21 +123,21 @@
         let activeRouteLine = null;
         let activeRouteHTML = "";
 
-        // LISTA DE SERVIDORES DE RESPALDO (ESCUDO ANTI 429)
         const OVERPASS_ENDPOINTS = [
             "https://overpass-api.de/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter",
-            "https://overpass.osm.ch/api/interpreter"
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
         ];
 
+        // --- 3. INICIALIZACIÓN PRINCIPAL ---
         window.onload = () => {
-            initMap();
-            searchGPS();
-            setTimeout(() => {
-                const splash = document.getElementById('splash-screen');
-                splash.style.opacity = '0';
-                setTimeout(() => splash.style.display = 'none', 500);
-            }, 3000);
+            try {
+                initMap();
+                searchGPS();
+            } catch (error) {
+                console.error("Error crítico al iniciar:", error);
+                showError("Error al cargar los mapas. Intenta refrescar la página.");
+            }
         };
 
         function initMap() {
@@ -143,9 +154,13 @@
         const busIcon = L.divIcon({ html: '🚏', className: 'custom-bus-icon', iconSize: [30, 30], iconAnchor: [15, 30] });
         const userIcon = L.divIcon({ html: '', className: 'user-dot', iconSize: [16, 16], iconAnchor: [8, 8] });
 
+        // --- 4. FUNCIONES DE APOYO ---
         function showError(msg) {
-            document.getElementById('errorBox').innerText = msg;
-            document.getElementById('errorBox').style.display = 'block';
+            const errBox = document.getElementById('errorBox');
+            if(errBox) {
+                errBox.innerText = msg;
+                errBox.style.display = 'block';
+            }
             document.getElementById('loading').style.display = 'none';
             clearInterval(countdownInterval);
             document.getElementById('refreshTimer').innerText = '';
@@ -181,6 +196,7 @@
             }, 1000);
         }
 
+        // --- 5. LÓGICA DE LA APP (TMB Y MAPAS) ---
         async function fetchBuses(stopCode, stopName = "", isSilent = false) {
             if (!isSilent) {
                 hideMessages();
@@ -333,7 +349,6 @@
             fetchBuses(code.trim());
         }
 
-        // FUNCIÓN QUE PRUEBA VARIOS SERVIDORES PARA EVITAR EL ERROR 429
         async function fetchOverpass(query) {
             for (let url of OVERPASS_ENDPOINTS) {
                 try {
@@ -343,14 +358,15 @@
                         body: `data=${encodeURIComponent(query)}`
                     });
                     if (res.ok) {
-                        return await res.json(); // Si funciona, devuelve los datos y sale del bucle
+                        return await res.json(); 
+                    } else {
+                        console.warn("Servidor ocupado:", url);
                     }
                 } catch (e) {
-                    console.warn("Fallo en el servidor: " + url + " - Probando el siguiente...");
-                    // Si falla, el bucle continúa e intenta con el siguiente servidor
+                    console.warn("Fallo de conexión con servidor:", url);
                 }
             }
-            throw new Error("Todos los servidores de mapas están muy ocupados. Inténtalo en unos minutos.");
+            throw new Error("Todos los mapas están muy ocupados. Inténtalo en unos minutos o busca por Nº de parada.");
         }
 
         function searchGPS() {
@@ -358,4 +374,88 @@
             clearInterval(countdownInterval);
             document.getElementById('results').innerHTML = '';
             document.getElementById('stopTitle').innerHTML = '';
-            document.getElementById
+            document.getElementById('refreshTimer').innerText = '';
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').innerText = "📍 Buscando señal GPS...";
+            routeLayer.clearLayers();
+
+            if (!navigator.geolocation) {
+                showError("Tu móvil no soporta GPS.");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                document.getElementById('loading').innerText = "📡 Descargando mapa...";
+                
+                map.setView([lat, lon], 16);
+                userMarkerLayer.clearLayers();
+                L.marker([lat, lon], {icon: userIcon}).addTo(userMarkerLayer).bindPopup("<b>Tú estás aquí</b>").openPopup();
+
+                try {
+                    const query = `[out:json][timeout:10];node["highway"="bus_stop"](around:400,${lat},${lon});out body;`;
+                    
+                    const osmData = await fetchOverpass(query);
+                    
+                    if (!osmData.elements || osmData.elements.length === 0) {
+                        showError("No estás a menos de 400m de ninguna parada.");
+                        return;
+                    }
+
+                    const stops = osmData.elements.map(e => {
+                        let codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
+                        let cleanCode = codeStr.replace(/\D/g, ''); 
+                        return {
+                            ref: (cleanCode.length > 0 && cleanCode.length <= 4) ? cleanCode : null,
+                            name: e.tags.name || `Parada ${cleanCode}`,
+                            lat: e.lat, lon: e.lon,
+                            dist: getDistance(lat, lon, e.lat, e.lon)
+                        };
+                    }).filter(e => e.ref !== null).sort((a, b) => a.dist - b.dist);
+
+                    if (stops.length === 0) {
+                        showError("Hay paradas cerca, pero no tienen código en el mapa.");
+                        return;
+                    }
+
+                    markersLayer.clearLayers();
+                    stops.forEach(stop => {
+                        const marker = L.marker([stop.lat, stop.lon], {icon: busIcon}).addTo(markersLayer);
+                        marker.on('click', () => {
+                            map.setView([stop.lat, stop.lon], 17);
+                            fetchBuses(stop.ref, stop.name);
+                        });
+                    });
+
+                    document.getElementById('loading').innerText = "⏱️ Conectando con los buses...";
+                    
+                    let found = false;
+                    for (let i = 0; i < Math.min(stops.length, 3); i++) {
+                        const stop = stops[i];
+                        const tmbRes = await fetch(`https://api.tmb.cat/v1/ibus/stops/${stop.ref}?app_id=${APP_ID}&app_key=${APP_KEY}`);
+                        
+                        if (tmbRes.ok) {
+                            const data = await tmbRes.json();
+                            if (data.data && data.data.ibus && data.data.ibus.length > 0) {
+                                document.getElementById('stopCode').value = stop.ref;
+                                renderBuses(data.data.ibus, stop.ref, stop.name, false);
+                                startAutoRefresh(stop.ref, stop.name);
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!found) fetchBuses(stops[0].ref, stops[0].name);
+
+                } catch (err) {
+                    showError(err.message);
+                }
+            }, (err) => {
+                showError("No has dado permiso al GPS o está desactivado.");
+            }, { timeout: 10000 });
+        }
+    </script>
+</body>
+</html>
