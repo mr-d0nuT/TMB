@@ -7,8 +7,39 @@
     <style>
         :root { --primary: #e30613; --bg: #f0f2f5; --card: #ffffff; --text: #333; }
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background: var(--bg); margin: 0; padding: 15px; color: var(--text); }
+        body { background: var(--bg); margin: 0; padding: 15px; color: var(--text); overflow-x: hidden; }
         
+        /* --- PANTALLA DE CARGA (SPLASH SCREEN) --- */
+        #splash-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out; /* Animación suave al desaparecer */
+        }
+        .img-donut {
+            width: 160px;
+            border-radius: 25px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin-bottom: 40px;
+            animation: pulse 2s infinite;
+        }
+        .img-app {
+            width: 90px;
+            border-radius: 18px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        /* ----------------------------------------- */
+
         .header { text-align: center; margin-bottom: 20px; margin-top: 10px; }
         .header h1 { margin: 0; color: var(--primary); font-size: 1.8rem; letter-spacing: -0.5px; }
         
@@ -21,18 +52,27 @@
         
         .error-msg { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px; font-size: 0.9rem; display: none; margin-bottom: 15px; text-align: center; border: 1px solid #fca5a5; }
         .loading { text-align: center; color: #666; padding: 20px; font-weight: bold; display: none; }
-        .stop-title { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 15px; color: #444; }
+        
+        .stop-title { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; color: #444; }
+        .refresh-indicator { text-align: center; font-size: 0.85rem; color: #888; margin-bottom: 15px; height: 20px; font-style: italic; }
         
         .bus-list { display: flex; flex-direction: column; gap: 12px; }
-        .bus-card { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 15px; border-left: 5px solid var(--primary); }
+        .bus-card { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 15px; border-left: 5px solid var(--primary); transition: opacity 0.3s; }
         .bus-line { background: var(--primary); color: white; padding: 8px 12px; border-radius: 6px; font-size: 1.2rem; font-weight: 900; min-width: 55px; text-align: center; }
         .bus-info { flex: 1; }
         .bus-dest { font-size: 0.85rem; color: #666; font-weight: 600; text-transform: uppercase; }
         .bus-time { font-size: 1.6rem; font-weight: 900; color: #059669; }
         .bus-time span { font-size: 0.8rem; font-weight: 500; color: #666; margin-left: 2px; }
+        .blink { animation: flash 1s ease-out; }
+        @keyframes flash { 0% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
+
+    <div id="splash-screen">
+        <img src="./assets/logo_donut.png" alt="Mr Donut" class="img-donut">
+        <img src="https://cdn-icons-png.flaticon.com/512/3448/3448339.png" alt="Bus App Logo" class="img-app">
+    </div>
 
     <div class="header">
         <h1>🚍 Bus BCN Pro</h1>
@@ -40,27 +80,50 @@
 
     <div class="controls">
         <div class="input-group">
-            <input type="number" id="stopCode" placeholder="Nº de parada (ej: 1234)">
+            <input type="number" id="stopCode" placeholder="Nº parada manual">
             <button onclick="searchManual()">Buscar</button>
         </div>
-        <button class="btn-gps" onclick="searchGPS()">📍 Encuentra mi parada</button>
+        <button class="btn-gps" onclick="searchGPS()">📍 Actualizar mi ubicación</button>
     </div>
 
     <div id="errorBox" class="error-msg"></div>
     <div id="loading" class="loading"></div>
     
     <div id="stopTitle" class="stop-title"></div>
+    <div id="refreshTimer" class="refresh-indicator"></div>
     <div id="results" class="bus-list"></div>
 
     <script>
         const APP_ID = 'f87364db';
         const APP_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
+        
+        let countdownInterval;
+        let secondsLeft = 20;
+
+        // Arrancar automáticamente al abrir la web
+        window.onload = () => {
+            // 1. Iniciamos la búsqueda por GPS en segundo plano INMEDIATAMENTE
+            searchGPS();
+
+            // 2. Controlamos la pantalla de carga (Splash Screen)
+            setTimeout(() => {
+                const splash = document.getElementById('splash-screen');
+                splash.style.opacity = '0'; // Empieza a desvanecerse
+                
+                setTimeout(() => {
+                    splash.style.display = 'none'; // Se oculta por completo
+                }, 500); // Tarda medio segundo en desaparecer suavemente
+                
+            }, 3000); // 3000 milisegundos = 3 segundos clavados
+        };
 
         function showError(msg) {
             const err = document.getElementById('errorBox');
             err.innerText = msg;
             err.style.display = 'block';
             document.getElementById('loading').style.display = 'none';
+            clearInterval(countdownInterval);
+            document.getElementById('refreshTimer').innerText = '';
         }
 
         function hideMessages() {
@@ -68,7 +131,6 @@
             document.getElementById('loading').style.display = 'none';
         }
 
-        // Fórmula matemática para calcular distancias en metros
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const p1 = lat1 * Math.PI/180;
@@ -80,11 +142,29 @@
             return R * c;
         }
 
-        async function fetchBuses(stopCode, stopName = "") {
-            hideMessages();
-            document.getElementById('results').innerHTML = '';
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('loading').innerText = "⏳ Consultando a TMB...";
+        function startAutoRefresh(stopCode, stopName) {
+            clearInterval(countdownInterval);
+            secondsLeft = 20;
+            document.getElementById('refreshTimer').innerText = `🔄 Actualizando en ${secondsLeft}s`;
+
+            countdownInterval = setInterval(() => {
+                secondsLeft--;
+                if (secondsLeft <= 0) {
+                    secondsLeft = 20;
+                    fetchBuses(stopCode, stopName, true); // Actualización silenciosa
+                }
+                document.getElementById('refreshTimer').innerText = `🔄 Actualizando en ${secondsLeft}s`;
+            }, 1000);
+        }
+
+        async function fetchBuses(stopCode, stopName = "", isSilent = false) {
+            if (!isSilent) {
+                hideMessages();
+                document.getElementById('results').innerHTML = '';
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('loading').innerText = "⏳ Consultando a TMB...";
+                document.getElementById('refreshTimer').innerText = '';
+            }
             
             try {
                 const url = `https://api.tmb.cat/v1/ibus/stops/${stopCode}?app_id=${APP_ID}&app_key=${APP_KEY}`;
@@ -93,14 +173,16 @@
                 if (!res.ok) throw new Error('Parada no encontrada en TMB.');
                 
                 const data = await res.json();
-                renderBuses(data.data.ibus, stopCode, stopName);
+                renderBuses(data.data.ibus, stopCode, stopName, isSilent);
+                
+                startAutoRefresh(stopCode, stopName);
 
             } catch (err) {
-                showError("Error al obtener los buses: " + err.message);
+                if (!isSilent) showError("Error al obtener los buses: " + err.message);
             }
         }
 
-        function renderBuses(buses, stopCode, stopName) {
+        function renderBuses(buses, stopCode, stopName, isSilent) {
             hideMessages();
             
             const titleHtml = stopName ? 
@@ -108,15 +190,18 @@
                 `📍 Parada: ${stopCode}`;
             document.getElementById('stopTitle').innerHTML = titleHtml;
 
+            const container = document.getElementById('results');
+
             if (!buses || buses.length === 0) {
-                showError("No hay buses previstos para esta parada en este momento.");
+                container.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">No hay buses previstos para esta parada.</div>';
                 return;
             }
 
             let html = '';
             buses.forEach(bus => {
+                const animClass = isSilent ? 'blink' : '';
                 html += `
-                    <div class="bus-card">
+                    <div class="bus-card ${animClass}">
                         <div class="bus-line">${bus.line}</div>
                         <div class="bus-info">
                             <div class="bus-dest">${bus.destination}</div>
@@ -125,7 +210,7 @@
                     </div>
                 `;
             });
-            document.getElementById('results').innerHTML = html;
+            container.innerHTML = html;
         }
 
         function searchManual() {
@@ -134,14 +219,16 @@
                 showError("Escribe el código de la parada.");
                 return;
             }
+            clearInterval(countdownInterval); 
             fetchBuses(code.trim());
         }
 
-        // EL NUEVO RADAR: Triangulación con OpenStreetMap (Bypass a la API de TMB)
         function searchGPS() {
             hideMessages();
+            clearInterval(countdownInterval);
             document.getElementById('results').innerHTML = '';
             document.getElementById('stopTitle').innerHTML = '';
+            document.getElementById('refreshTimer').innerText = '';
             document.getElementById('loading').style.display = 'block';
             document.getElementById('loading').innerText = "📍 Activando antena GPS...";
 
@@ -153,10 +240,9 @@
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
-                document.getElementById('loading').innerText = "📡 Buscando paradas en el mapa...";
+                document.getElementById('loading').innerText = "📡 Buscando paradas cercanas...";
                 
                 try {
-                    // Pedimos las paradas a OpenStreetMap en un radio de 400 metros
                     const query = `[out:json][timeout:10];node["highway"="bus_stop"](around:400,${lat},${lon});out body;`;
                     const osmRes = await fetch("https://overpass-api.de/api/interpreter", {
                         method: "POST",
@@ -172,11 +258,9 @@
                         return;
                     }
 
-                    // Limpiamos los datos y calculamos la más cercana
                     const stops = osmData.elements.map(e => {
-                        // Extraemos cualquier código numérico de las etiquetas de la parada
                         let codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
-                        let cleanCode = codeStr.replace(/\D/g, ''); // Deja solo los números
+                        let cleanCode = codeStr.replace(/\D/g, ''); 
                         
                         return {
                             ref: (cleanCode.length > 0 && cleanCode.length <= 4) ? cleanCode : null,
@@ -186,13 +270,12 @@
                     }).filter(e => e.ref !== null).sort((a, b) => a.dist - b.dist);
 
                     if (stops.length === 0) {
-                        showError("Hay paradas cerca, pero no tienen un código TMB asignado en el mapa.");
+                        showError("Hay paradas cerca, pero no tienen código en el mapa.");
                         return;
                     }
 
                     document.getElementById('loading').innerText = "⏱️ Conectando con los buses...";
                     
-                    // Probamos las 3 paradas más cercanas por si alguna está fuera de servicio
                     let found = false;
                     for (let i = 0; i < Math.min(stops.length, 3); i++) {
                         const stop = stops[i];
@@ -203,14 +286,14 @@
                             const data = await tmbRes.json();
                             if (data.data && data.data.ibus && data.data.ibus.length > 0) {
                                 document.getElementById('stopCode').value = stop.ref;
-                                renderBuses(data.data.ibus, stop.ref, stop.name);
+                                renderBuses(data.data.ibus, stop.ref, stop.name, false);
+                                startAutoRefresh(stop.ref, stop.name);
                                 found = true;
                                 break;
                             }
                         }
                     }
 
-                    // Si no había buses en las más cercanas, mostramos la primera aunque esté vacía
                     if (!found) {
                         document.getElementById('stopCode').value = stops[0].ref;
                         fetchBuses(stops[0].ref, stops[0].name);
