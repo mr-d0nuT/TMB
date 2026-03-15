@@ -2,136 +2,168 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bus BCN - Próximos Buses</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bus BCN Pro</title>
     <style>
-        :root { --tmb-red: #e30613; --bg: #f8f9fa; --text: #333; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text); }
+        :root { --primary: #e30613; --bg: #f0f2f5; --card: #ffffff; --text: #333; }
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); margin: 0; padding: 15px; color: var(--text); }
         
-        /* Cabecera y Estado */
-        .status-card { background: #fff; padding: 20px; border-radius: 15px; margin-bottom: 20px; 
-                       box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; border-bottom: 4px solid var(--tmb-red); }
-        .stop-name { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; display: block; }
-        .stop-code { font-size: 0.8rem; color: #888; text-transform: uppercase; }
+        .header { text-align: center; margin-bottom: 20px; margin-top: 10px; }
+        .header h1 { margin: 0; color: var(--primary); font-size: 1.8rem; letter-spacing: -0.5px; }
         
-        /* Tarjetas de Bus */
-        .bus-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 12px; 
-                    display: flex; justify-content: space-between; align-items: center;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .line-badge { background: var(--tmb-red); color: white; padding: 8px 12px; border-radius: 8px; 
-                      font-weight: 800; font-size: 1.3rem; min-width: 50px; text-align: center; }
-        .info { flex-grow: 1; margin: 0 15px; }
-        .dest { font-size: 0.85rem; color: #666; font-weight: 600; text-transform: uppercase; }
-        .time { font-size: 1.5rem; font-weight: 900; color: #27ae60; }
-        .time span { font-size: 0.8rem; font-weight: normal; color: #888; margin-left: 2px; }
-
-        /* Botón y Animaciones */
-        button { width: 100%; padding: 15px; border: none; border-radius: 12px; background: #222; 
-                 color: white; font-weight: bold; font-size: 1rem; cursor: pointer; transition: 0.2s; }
-        button:active { transform: scale(0.97); background: #000; }
+        .controls { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; text-align: center; font-weight: bold; }
+        button { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.95); }
+        .btn-gps { background: #333; width: 100%; font-size: 1rem; }
         
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid var(--tmb-red); 
-                  border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; 
-                  display: inline-block; margin-bottom: 10px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .msg { color: #888; padding: 40px; text-align: center; }
+        .error-msg { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px; font-size: 0.9rem; display: none; margin-bottom: 15px; text-align: center; border: 1px solid #fca5a5; }
+        .loading { text-align: center; color: #666; padding: 20px; font-weight: bold; display: none; }
+        .stop-title { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 15px; color: #444; }
+        
+        .bus-list { display: flex; flex-direction: column; gap: 12px; }
+        .bus-card { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 15px; border-left: 5px solid var(--primary); }
+        .bus-line { background: var(--primary); color: white; padding: 8px 12px; border-radius: 6px; font-size: 1.2rem; font-weight: 900; min-width: 55px; text-align: center; }
+        .bus-info { flex: 1; }
+        .bus-dest { font-size: 0.85rem; color: #666; font-weight: 600; text-transform: uppercase; }
+        .bus-time { font-size: 1.6rem; font-weight: 900; color: #059669; }
+        .bus-time span { font-size: 0.8rem; font-weight: 500; color: #666; margin-left: 2px; }
     </style>
 </head>
 <body>
 
-    <div class="status-card">
-        <div id="loader-container"><div class="loader"></div></div>
-        <span id="stop-info" class="stop-name">Localizando...</span>
-        <span id="stop-code" class="stop-code">Buscando parada cercana</span>
-        <button style="margin-top: 15px;" onclick="init()">🔄 Refrescar</button>
+    <div class="header">
+        <h1>🚍 Bus BCN Pro</h1>
     </div>
 
-    <div id="results"></div>
+    <div class="controls">
+        <div class="input-group">
+            <input type="number" id="stopCode" placeholder="Nº de parada (ej: 1234)">
+            <button onclick="searchManual()">Buscar</button>
+        </div>
+        <button class="btn-gps" onclick="searchGPS()">📍 Usar mi ubicación</button>
+    </div>
+
+    <div id="errorBox" class="error-msg"></div>
+    <div id="loading" class="loading">⏳ Consultando a TMB...</div>
+    
+    <div id="stopTitle" class="stop-title"></div>
+    <div id="results" class="bus-list"></div>
 
     <script>
-        // CREDENCIALES ACTUALIZADAS
+        // Tus credenciales correctas
         const APP_ID = 'f87364db';
         const APP_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
 
-        async function init() {
-            const stopInfo = document.getElementById('stop-info');
-            const stopCodeSpan = document.getElementById('stop-code');
-            const resultsDiv = document.getElementById('results');
-            const loader = document.getElementById('loader-container');
+        function showError(msg) {
+            const err = document.getElementById('errorBox');
+            err.innerText = msg;
+            err.style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+        }
 
-            loader.style.display = 'block';
-            resultsDiv.innerHTML = '';
-            stopInfo.innerText = "Localizando...";
+        function hideMessages() {
+            document.getElementById('errorBox').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        async function fetchBuses(stopCode) {
+            hideMessages();
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').innerText = "⏳ Obteniendo tiempos de llegada...";
+            document.getElementById('stopTitle').innerText = `Parada: ${stopCode}`;
+
+            try {
+                // Endpoint robusto de iBus
+                const url = `https://api.tmb.cat/v1/ibus/stops/${stopCode}?app_id=${APP_ID}&app_key=${APP_KEY}`;
+                const res = await fetch(url);
+                
+                if (!res.ok) throw new Error('Parada no encontrada o sin servicio ahora mismo.');
+                
+                const data = await res.json();
+                const buses = data.data.ibus;
+                
+                hideMessages();
+
+                if (!buses || buses.length === 0) {
+                    showError("No hay buses previstos para esta parada en este momento.");
+                    return;
+                }
+
+                let html = '';
+                buses.forEach(bus => {
+                    html += `
+                        <div class="bus-card">
+                            <div class="bus-line">${bus.line}</div>
+                            <div class="bus-info">
+                                <div class="bus-dest">${bus.destination}</div>
+                            </div>
+                            <div class="bus-time">${bus['t-in-min']}<span>min</span></div>
+                        </div>
+                    `;
+                });
+                document.getElementById('results').innerHTML = html;
+
+            } catch (err) {
+                showError("Error al obtener los buses: " + err.message);
+            }
+        }
+
+        function searchManual() {
+            const code = document.getElementById('stopCode').value;
+            if (!code || code.trim() === '') {
+                showError("Por favor, introduce el código de 4 números de la parada.");
+                return;
+            }
+            fetchBuses(code.trim());
+        }
+
+        function searchGPS() {
+            hideMessages();
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('stopTitle').innerText = "";
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').innerText = "📍 Buscando tu ubicación...";
 
             if (!navigator.geolocation) {
-                stopInfo.innerText = "GPS no soportado";
-                loader.style.display = 'none';
+                showError("Tu móvil o navegador no soporta el GPS.");
                 return;
             }
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const { latitude, longitude } = pos.coords;
+                document.getElementById('loading').innerText = "📡 Buscando la parada más cercana...";
                 
                 try {
-                    // 1. Buscamos parada más cercana
-                    const stopUrl = `https://api.tmb.cat/v1/planner/neareststops?lat=${latitude}&lon=${longitude}&app_id=${APP_ID}&app_key=${APP_KEY}`;
-                    const stopRes = await fetch(stopUrl);
-                    const stopData = await stopRes.json();
+                    const url = `https://api.tmb.cat/v1/planner/neareststops?lat=${latitude}&lon=${longitude}&app_id=${APP_ID}&app_key=${APP_KEY}`;
+                    const res = await fetch(url);
                     
-                    if (!stopData.features || stopData.features.length === 0) {
-                        stopInfo.innerText = "No hay paradas cerca";
-                        loader.style.display = 'none';
+                    if (!res.ok) throw new Error("La API de ubicación no responde.");
+                    
+                    const data = await res.json();
+                    
+                    if (!data.features || data.features.length === 0) {
+                        showError("No se ha encontrado ninguna parada de TMB cerca de tu ubicación actual.");
                         return;
                     }
 
-                    const closestStop = stopData.features[0];
-                    const stopId = closestStop.properties.code;
-                    const stopName = closestStop.properties.name;
-
-                    stopInfo.innerText = stopName;
-                    stopCodeSpan.innerText = `Código de Parada: ${stopId}`;
-
-                    // 2. Buscamos tiempos de llegada
-                    const ibusUrl = `https://api.tmb.cat/v1/ibus/stops/${stopId}?app_id=${APP_ID}&app_key=${APP_KEY}`;
-                    const ibusRes = await fetch(ibusUrl);
-                    const ibusData = await ibusRes.json();
+                    // Extraemos el código de la parada más cercana
+                    const stopCode = data.features[0].properties.code;
+                    document.getElementById('stopCode').value = stopCode; // Lo ponemos en la caja
                     
-                    renderBuses(ibusData.data.ibus);
+                    // Buscamos los buses de esa parada
+                    fetchBuses(stopCode);
+
                 } catch (err) {
-                    stopInfo.innerText = "Error de conexión";
-                    console.error(err);
-                } finally {
-                    loader.style.display = 'none';
+                    showError("El radar de paradas ha fallado. Por favor, mira el número de la marquesina y escríbelo en la caja de arriba.");
                 }
-            }, (error) => {
-                stopInfo.innerText = "Activa el GPS";
-                loader.style.display = 'none';
-            });
+            }, (err) => {
+                showError("No se pudo acceder al GPS. Asegúrate de darle permisos a la web o busca por código de parada.");
+            }, { timeout: 10000 }); // Máximo 10 segundos buscando
         }
-
-        function renderBuses(buses) {
-            const container = document.getElementById('results');
-            if (!buses || buses.length === 0) {
-                container.innerHTML = '<div class="msg">No hay buses circulando ahora para esta parada.</div>';
-                return;
-            }
-
-            buses.forEach(bus => {
-                const card = document.createElement('div');
-                card.className = 'bus-card';
-                card.innerHTML = `
-                    <div class="line-badge">${bus.line}</div>
-                    <div class="info">
-                        <div class="dest">${bus.destination}</div>
-                    </div>
-                    <div class="time">${bus['t-in-min']}<span>min</span></div>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        // Arrancar al cargar la página
-        init();
     </script>
 </body>
 </html>
