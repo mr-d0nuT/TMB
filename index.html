@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bus BCN Pro</title>
     
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
-        :root { --primary: #e30613; --bg: #f0f2f5; --card: #ffffff; --text: #333; --blue: #4285F4; }
+        :root { --primary: #e30613; --bg: #f0f2f5; --card: #ffffff; --text: #333; --blue: #2196F3; }
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background: var(--bg); margin: 0; padding: 15px; color: var(--text); overflow-x: hidden; }
         
@@ -25,7 +28,10 @@
         .header { text-align: center; margin-bottom: 15px; margin-top: 5px; }
         .header h1 { margin: 0; color: var(--primary); font-size: 1.8rem; letter-spacing: -0.5px; }
         
-        #map { height: 280px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 2px solid #ddd; }
+        #map { height: 280px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1; border: 2px solid #ddd; }
+        
+        .custom-bus-icon { font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.4); text-align: center; line-height: 24px; }
+        .user-dot { background-color: var(--blue); border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(33,150,243,0.8); }
 
         /* CONTROLES */
         .controls { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
@@ -41,7 +47,7 @@
         .stop-title { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; color: #444; }
         .refresh-indicator { text-align: center; font-size: 0.85rem; color: #888; margin-bottom: 15px; height: 20px; font-style: italic; }
         
-        /* TARJETAS DE BUS */
+        /* TARJETAS DE BUS (ACORDEÓN) */
         .bus-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px; }
         .bus-card { background: var(--card); border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 5px solid var(--primary); overflow: hidden; }
         .bus-card-content { padding: 15px; display: flex; align-items: center; gap: 15px; cursor: pointer; transition: background 0.2s; }
@@ -69,12 +75,14 @@
 <body>
 
     <div id="splash-screen">
-        <img src="./assets/logo_donut.png" alt="Mr Donut" class="img-donut">
+        <img src="./assets/logo_donut.png" alt="Mr Donut" class="img-donut" onerror="this.style.display='none'">
         <img src="https://cdn-icons-png.flaticon.com/512/3448/3448339.png" alt="Bus App Logo" class="img-app">
     </div>
 
     <div class="header"><h1>🚍 Bus BCN Pro</h1></div>
-    <div id="map"></div> <div class="controls">
+    <div id="map"></div>
+
+    <div class="controls">
         <div class="input-group">
             <input type="number" id="stopCode" placeholder="Nº parada manual">
             <button onclick="searchManual()">Buscar</button>
@@ -90,46 +98,50 @@
     <div id="results" class="bus-list"></div>
 
     <script>
-        // --- CREDENCIALES ---
         const APP_ID = 'f87364db';
         const APP_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
         
         let countdownInterval;
         let secondsLeft = 20;
         
-        // --- VARIABLES GOOGLE MAPS ---
         let map;
-        let busMarkers = [];
-        let userMarker = null;
-        let routePolyline = null;
-        let routeStopMarkers = [];
+        let markersLayer;
+        let userMarkerLayer;
+        let routeLayer;
+
         let activeRouteLine = null;
         let activeRouteHTML = "";
 
-        // Inicialización de Google Maps
-        window.initMapGoogle = function() {
-            map = new google.maps.Map(document.getElementById('map'), {
-                center: {lat: 41.3879, lng: 2.1699},
-                zoom: 14,
-                disableDefaultUI: true, // Quita botones innecesarios de Google
-                zoomControl: true,
-                styles: [ // Estilo limpio
-                    { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-                    { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] }
-                ]
-            });
-            
-            // Cuando el mapa esté listo, buscamos el GPS
-            searchGPS();
-        }
+        // LISTA DE SERVIDORES DE RESPALDO (ESCUDO ANTI 429)
+        const OVERPASS_ENDPOINTS = [
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://overpass.osm.ch/api/interpreter"
+        ];
 
         window.onload = () => {
+            initMap();
+            searchGPS();
             setTimeout(() => {
                 const splash = document.getElementById('splash-screen');
                 splash.style.opacity = '0';
                 setTimeout(() => splash.style.display = 'none', 500);
             }, 3000);
         };
+
+        function initMap() {
+            map = L.map('map').setView([41.3879, 2.1699], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+                maxZoom: 19
+            }).addTo(map);
+            markersLayer = L.layerGroup().addTo(map);
+            userMarkerLayer = L.layerGroup().addTo(map);
+            routeLayer = L.featureGroup().addTo(map);
+        }
+
+        const busIcon = L.divIcon({ html: '🚏', className: 'custom-bus-icon', iconSize: [30, 30], iconAnchor: [15, 30] });
+        const userIcon = L.divIcon({ html: '', className: 'user-dot', iconSize: [16, 16], iconAnchor: [8, 8] });
 
         function showError(msg) {
             document.getElementById('errorBox').innerText = msg;
@@ -152,18 +164,6 @@
             const dl = (lon2-lon1) * Math.PI/180;
             const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        }
-
-        function clearRouteMap() {
-            if (routePolyline) routePolyline.setMap(null);
-            routeStopMarkers.forEach(m => m.setMap(null));
-            routeStopMarkers = [];
-            routePolyline = null;
-        }
-
-        function clearBusMarkers() {
-            busMarkers.forEach(m => m.setMap(null));
-            busMarkers = [];
         }
 
         function startAutoRefresh(stopCode, stopName) {
@@ -189,8 +189,7 @@
                 document.getElementById('loading').innerText = "⏳ Consultando a TMB...";
                 document.getElementById('refreshTimer').innerText = '';
                 document.getElementById('stopCode').value = stopCode;
-                
-                clearRouteMap();
+                routeLayer.clearLayers();
                 activeRouteLine = null;
                 activeRouteHTML = "";
             }
@@ -252,14 +251,14 @@
             
             if (itineraryDiv.style.display === 'block') {
                 itineraryDiv.style.display = 'none';
-                clearRouteMap();
+                routeLayer.clearLayers();
                 activeRouteLine = null;
                 activeRouteHTML = "";
                 return;
             }
 
             document.querySelectorAll('.bus-itinerary').forEach(el => el.style.display = 'none');
-            clearRouteMap();
+            routeLayer.clearLayers();
             
             activeRouteLine = line;
             itineraryDiv.style.display = 'block';
@@ -271,8 +270,9 @@
                 if (!res.ok) throw new Error('Ruta no disponible');
                 
                 const data = await res.json();
+                
                 const currentStopFeature = data.features.find(f => f.properties.CODI_PARADA == stopCode);
-                if (!currentStopFeature) throw new Error('No se localiza el sentido del recorrido');
+                if (!currentStopFeature) throw new Error('No se ha podido localizar el sentido del recorrido');
 
                 const sentit = currentStopFeature.properties.SENTIT;
                 const ordre = currentStopFeature.properties.ORDRE;
@@ -282,59 +282,37 @@
                     .sort((a, b) => a.properties.ORDRE - b.properties.ORDRE);
 
                 let html = '<div>';
-                let routeCoords = [];
-                let bounds = new google.maps.LatLngBounds();
+                let latlngs = [];
 
                 stops.forEach((stop, index) => {
                     const isFirst = index === 0;
                     const isLast = index === stops.length - 1;
-                    const color = isFirst ? '#e30613' : (isLast ? '#059669' : '#4285F4');
+                    const color = isFirst ? 'var(--primary)' : (isLast ? '#059669' : '#2196F3');
                     
-                    // Google usa {lat, lng} (TMB devuelve [lng, lat])
-                    const latlng = {
-                        lat: stop.geometry.coordinates[1],
-                        lng: stop.geometry.coordinates[0]
-                    };
-                    routeCoords.push(latlng);
-                    bounds.extend(latlng); // Expandir la vista del mapa
+                    const latlng = [stop.geometry.coordinates[1], stop.geometry.coordinates[0]];
+                    latlngs.push(latlng);
 
-                    // Marcador de parada de la ruta
-                    const routeMarker = new google.maps.Marker({
-                        position: latlng,
-                        map: map,
-                        title: stop.properties.NOM_PARADA,
-                        icon: {
-                            path: google.maps.SymbolPath.CIRCLE,
-                            scale: (isFirst || isLast) ? 6 : 4,
-                            fillColor: color,
-                            fillOpacity: 1,
-                            strokeWeight: 2,
-                            strokeColor: "white"
-                        }
-                    });
-                    routeStopMarkers.push(routeMarker);
+                    L.circleMarker(latlng, {
+                        radius: (isFirst || isLast) ? 6 : 4,
+                        color: color,
+                        fillColor: 'white',
+                        fillOpacity: 1,
+                        weight: 3
+                    }).bindPopup(`<b>${stop.properties.NOM_PARADA}</b>`).addTo(routeLayer);
 
                     html += `
                         <div class="itinerary-node">
                             <div class="node-dot" style="background: ${color}"></div>
-                            <div class="node-name" style="font-weight: ${isFirst||isLast ? 'bold' : 'normal'}">${stop.properties.NOM_PARADA}</div>
+                            <div class="node-name" style="font-weight: ${isFirst||isLast ? 'bold' : 'normal'}">
+                                ${stop.properties.NOM_PARADA}
+                            </div>
                         </div>
                     `;
                 });
                 html += '</div>';
 
-                // Trazar línea de ruta azul
-                routePolyline = new google.maps.Polyline({
-                    path: routeCoords,
-                    geodesic: true,
-                    strokeColor: '#4285F4',
-                    strokeOpacity: 0.8,
-                    strokeWeight: 4
-                });
-                routePolyline.setMap(map);
-                
-                // Centrar mapa en la ruta
-                map.fitBounds(bounds);
+                L.polyline(latlngs, {color: '#2196F3', weight: 4, opacity: 0.7}).addTo(routeLayer);
+                map.fitBounds(routeLayer.getBounds(), {padding: [20, 20]});
 
                 itineraryDiv.innerHTML = html;
                 activeRouteHTML = html;
@@ -355,126 +333,29 @@
             fetchBuses(code.trim());
         }
 
+        // FUNCIÓN QUE PRUEBA VARIOS SERVIDORES PARA EVITAR EL ERROR 429
+        async function fetchOverpass(query) {
+            for (let url of OVERPASS_ENDPOINTS) {
+                try {
+                    const res = await fetch(url, {
+                        method: "POST", 
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: `data=${encodeURIComponent(query)}`
+                    });
+                    if (res.ok) {
+                        return await res.json(); // Si funciona, devuelve los datos y sale del bucle
+                    }
+                } catch (e) {
+                    console.warn("Fallo en el servidor: " + url + " - Probando el siguiente...");
+                    // Si falla, el bucle continúa e intenta con el siguiente servidor
+                }
+            }
+            throw new Error("Todos los servidores de mapas están muy ocupados. Inténtalo en unos minutos.");
+        }
+
         function searchGPS() {
             hideMessages();
             clearInterval(countdownInterval);
             document.getElementById('results').innerHTML = '';
             document.getElementById('stopTitle').innerHTML = '';
-            document.getElementById('refreshTimer').innerText = '';
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('loading').innerText = "📍 Buscando señal GPS...";
-            clearRouteMap();
-
-            if (!navigator.geolocation) {
-                showError("Tu móvil no soporta GPS.");
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                document.getElementById('loading').innerText = "📡 Descargando mapa...";
-                
-                const userLatLng = {lat: lat, lng: lon};
-                map.setCenter(userLatLng);
-                map.setZoom(16);
-
-                // Pintar usuario en el mapa
-                if (userMarker) userMarker.setMap(null);
-                userMarker = new google.maps.Marker({
-                    position: userLatLng,
-                    map: map,
-                    title: "Tú estás aquí",
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 8,
-                        fillColor: "#4285F4",
-                        fillOpacity: 1,
-                        strokeWeight: 3,
-                        strokeColor: "#FFFFFF"
-                    }
-                });
-
-                try {
-                    // Seguimos usando Overpass para sacar los códigos de TMB porque Google Maps no los proporciona fácilmente
-                    const query = `[out:json][timeout:10];node["highway"="bus_stop"](around:400,${lat},${lon});out body;`;
-                    const osmRes = await fetch("https://overpass-api.de/api/interpreter", {
-                        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: `data=${encodeURIComponent(query)}`
-                    });
-                    
-                    if (!osmRes.ok) throw new Error("Los mapas no responden.");
-                    const osmData = await osmRes.json();
-                    
-                    if (!osmData.elements || osmData.elements.length === 0) {
-                        showError("No estás a menos de 400m de ninguna parada.");
-                        return;
-                    }
-
-                    const stops = osmData.elements.map(e => {
-                        let codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
-                        let cleanCode = codeStr.replace(/\D/g, ''); 
-                        return {
-                            ref: (cleanCode.length > 0 && cleanCode.length <= 4) ? cleanCode : null,
-                            name: e.tags.name || `Parada ${cleanCode}`,
-                            lat: e.lat, lon: e.lon,
-                            dist: getDistance(lat, lon, e.lat, e.lon)
-                        };
-                    }).filter(e => e.ref !== null).sort((a, b) => a.dist - b.dist);
-
-                    if (stops.length === 0) {
-                        showError("Hay paradas cerca, pero no tienen código.");
-                        return;
-                    }
-
-                    clearBusMarkers();
-                    stops.forEach(stop => {
-                        const marker = new google.maps.Marker({
-                            position: {lat: stop.lat, lng: stop.lon},
-                            map: map,
-                            title: stop.name,
-                            label: "🚏" // Icono de parada nativo de Google Maps (emoji)
-                        });
-                        
-                        marker.addListener('click', () => {
-                            map.setZoom(17);
-                            map.panTo(marker.getPosition());
-                            fetchBuses(stop.ref, stop.name);
-                        });
-                        busMarkers.push(marker);
-                    });
-
-                    document.getElementById('loading').innerText = "⏱️ Conectando con los buses...";
-                    
-                    let found = false;
-                    for (let i = 0; i < Math.min(stops.length, 3); i++) {
-                        const stop = stops[i];
-                        const tmbRes = await fetch(`https://api.tmb.cat/v1/ibus/stops/${stop.ref}?app_id=${APP_ID}&app_key=${APP_KEY}`);
-                        
-                        if (tmbRes.ok) {
-                            const data = await tmbRes.json();
-                            if (data.data && data.data.ibus && data.data.ibus.length > 0) {
-                                document.getElementById('stopCode').value = stop.ref;
-                                renderBuses(data.data.ibus, stop.ref, stop.name, false);
-                                startAutoRefresh(stop.ref, stop.name);
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!found) fetchBuses(stops[0].ref, stops[0].name);
-
-                } catch (err) {
-                    showError("Error de red al buscar en el mapa: " + err.message);
-                }
-            }, (err) => {
-                showError("No has dado permiso al GPS o está desactivado.");
-            }, { timeout: 10000 });
-        }
-    </script>
-    
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=TU_API_KEY_DE_GOOGLE_AQUI&callback=initMapGoogle"></script>
-
-</body>
-</html>
+            document.getElementById
