@@ -4,45 +4,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bus BCN Pro</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
         :root { --primary: #e30613; --bg: #f0f2f5; --card: #ffffff; --text: #333; }
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background: var(--bg); margin: 0; padding: 15px; color: var(--text); overflow-x: hidden; }
         
-        /* --- PANTALLA DE CARGA (SPLASH SCREEN) --- */
+        /* PANTALLA DE CARGA */
         #splash-screen {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--bg);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            transition: opacity 0.5s ease-out; /* Animación suave al desaparecer */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999;
+            transition: opacity 0.5s ease-out;
         }
-        .img-donut {
-            width: 160px;
-            border-radius: 25px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            margin-bottom: 40px;
-            animation: pulse 2s infinite;
-        }
-        .img-app {
-            width: 90px;
-            border-radius: 18px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-        /* ----------------------------------------- */
+        .img-donut { width: 160px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin-bottom: 40px; animation: pulse 2s infinite; }
+        .img-app { width: 90px; border-radius: 18px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
 
-        .header { text-align: center; margin-bottom: 20px; margin-top: 10px; }
+        /* CABECERA Y MAPA */
+        .header { text-align: center; margin-bottom: 15px; margin-top: 5px; }
         .header h1 { margin: 0; color: var(--primary); font-size: 1.8rem; letter-spacing: -0.5px; }
         
+        #map { height: 250px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1; border: 2px solid #ddd; }
+        
+        /* Icono personalizado del mapa */
+        .custom-bus-icon { font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.4); text-align: center; line-height: 24px; }
+        .user-dot { background-color: #2196F3; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(33,150,243,0.8); }
+
+        /* CONTROLES */
         .controls { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
         .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
         input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; text-align: center; font-weight: bold; }
@@ -50,13 +42,13 @@
         button:active { transform: scale(0.95); }
         .btn-gps { background: #333; width: 100%; font-size: 1rem; }
         
+        /* ESTADOS Y LISTA DE BUSES */
         .error-msg { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px; font-size: 0.9rem; display: none; margin-bottom: 15px; text-align: center; border: 1px solid #fca5a5; }
         .loading { text-align: center; color: #666; padding: 20px; font-weight: bold; display: none; }
-        
         .stop-title { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; color: #444; }
         .refresh-indicator { text-align: center; font-size: 0.85rem; color: #888; margin-bottom: 15px; height: 20px; font-style: italic; }
         
-        .bus-list { display: flex; flex-direction: column; gap: 12px; }
+        .bus-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 30px; }
         .bus-card { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 15px; border-left: 5px solid var(--primary); transition: opacity 0.3s; }
         .bus-line { background: var(--primary); color: white; padding: 8px 12px; border-radius: 6px; font-size: 1.2rem; font-weight: 900; min-width: 55px; text-align: center; }
         .bus-info { flex: 1; }
@@ -77,13 +69,13 @@
     <div class="header">
         <h1>🚍 Bus BCN Pro</h1>
     </div>
-
-    <div class="controls">
+    
+    <div id="map"></div> <div class="controls">
         <div class="input-group">
             <input type="number" id="stopCode" placeholder="Nº parada manual">
             <button onclick="searchManual()">Buscar</button>
         </div>
-        <button class="btn-gps" onclick="searchGPS()">📍 Actualizar mi ubicación</button>
+        <button class="btn-gps" onclick="searchGPS()">📍 Centrar Mapa y Actualizar</button>
     </div>
 
     <div id="errorBox" class="error-msg"></div>
@@ -99,23 +91,49 @@
         
         let countdownInterval;
         let secondsLeft = 20;
+        
+        // Variables del mapa
+        let map;
+        let markersLayer;
+        let userMarkerLayer;
 
-        // Arrancar automáticamente al abrir la web
         window.onload = () => {
-            // 1. Iniciamos la búsqueda por GPS en segundo plano INMEDIATAMENTE
-            searchGPS();
+            initMap(); // Preparamos el mapa en blanco
+            searchGPS(); // Buscamos ubicación y paradas
 
-            // 2. Controlamos la pantalla de carga (Splash Screen)
             setTimeout(() => {
                 const splash = document.getElementById('splash-screen');
-                splash.style.opacity = '0'; // Empieza a desvanecerse
-                
-                setTimeout(() => {
-                    splash.style.display = 'none'; // Se oculta por completo
-                }, 500); // Tarda medio segundo en desaparecer suavemente
-                
-            }, 3000); // 3000 milisegundos = 3 segundos clavados
+                splash.style.opacity = '0';
+                setTimeout(() => splash.style.display = 'none', 500);
+            }, 3000);
         };
+
+        // --- FUNCIONES DEL MAPA ---
+        function initMap() {
+            // Inicializa en el centro de Barcelona por defecto
+            map = L.map('map').setView([41.3879, 2.1699], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            markersLayer = L.layerGroup().addTo(map);
+            userMarkerLayer = L.layerGroup().addTo(map);
+        }
+
+        const busIcon = L.divIcon({
+            html: '🚏',
+            className: 'custom-bus-icon',
+            iconSize: [30, 30],
+            iconAnchor: [15, 30]
+        });
+
+        const userIcon = L.divIcon({
+            html: '',
+            className: 'user-dot',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+
+        // ---------------------------
 
         function showError(msg) {
             const err = document.getElementById('errorBox');
@@ -138,8 +156,7 @@
             const dp = (lat2-lat1) * Math.PI/180;
             const dl = (lon2-lon1) * Math.PI/180;
             const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
         function startAutoRefresh(stopCode, stopName) {
@@ -151,7 +168,7 @@
                 secondsLeft--;
                 if (secondsLeft <= 0) {
                     secondsLeft = 20;
-                    fetchBuses(stopCode, stopName, true); // Actualización silenciosa
+                    fetchBuses(stopCode, stopName, true);
                 }
                 document.getElementById('refreshTimer').innerText = `🔄 Actualizando en ${secondsLeft}s`;
             }, 1000);
@@ -164,19 +181,17 @@
                 document.getElementById('loading').style.display = 'block';
                 document.getElementById('loading').innerText = "⏳ Consultando a TMB...";
                 document.getElementById('refreshTimer').innerText = '';
+                document.getElementById('stopCode').value = stopCode; // Actualiza el input manual
             }
             
             try {
                 const url = `https://api.tmb.cat/v1/ibus/stops/${stopCode}?app_id=${APP_ID}&app_key=${APP_KEY}`;
                 const res = await fetch(url);
-                
                 if (!res.ok) throw new Error('Parada no encontrada en TMB.');
                 
                 const data = await res.json();
                 renderBuses(data.data.ibus, stopCode, stopName, isSilent);
-                
                 startAutoRefresh(stopCode, stopName);
-
             } catch (err) {
                 if (!isSilent) showError("Error al obtener los buses: " + err.message);
             }
@@ -184,7 +199,6 @@
 
         function renderBuses(buses, stopCode, stopName, isSilent) {
             hideMessages();
-            
             const titleHtml = stopName ? 
                 `📍 ${stopName} <br><small style="color:#888; font-size:0.85rem">Cód: ${stopCode}</small>` : 
                 `📍 Parada: ${stopCode}`;
@@ -230,7 +244,7 @@
             document.getElementById('stopTitle').innerHTML = '';
             document.getElementById('refreshTimer').innerText = '';
             document.getElementById('loading').style.display = 'block';
-            document.getElementById('loading').innerText = "📍 Activando antena GPS...";
+            document.getElementById('loading').innerText = "📍 Buscando señal GPS...";
 
             if (!navigator.geolocation) {
                 showError("Tu móvil no soporta GPS.");
@@ -240,13 +254,18 @@
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
-                document.getElementById('loading').innerText = "📡 Buscando paradas cercanas...";
+                document.getElementById('loading').innerText = "📡 Descargando mapa...";
                 
+                // Actualizar mapa con ubicación del usuario
+                map.setView([lat, lon], 16);
+                userMarkerLayer.clearLayers();
+                L.marker([lat, lon], {icon: userIcon}).addTo(userMarkerLayer).bindPopup("<b>Tú estás aquí</b>").openPopup();
+
                 try {
+                    // Buscar paradas en 400m
                     const query = `[out:json][timeout:10];node["highway"="bus_stop"](around:400,${lat},${lon});out body;`;
                     const osmRes = await fetch("https://overpass-api.de/api/interpreter", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
                         body: `data=${encodeURIComponent(query)}`
                     });
                     
@@ -261,10 +280,10 @@
                     const stops = osmData.elements.map(e => {
                         let codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
                         let cleanCode = codeStr.replace(/\D/g, ''); 
-                        
                         return {
                             ref: (cleanCode.length > 0 && cleanCode.length <= 4) ? cleanCode : null,
                             name: e.tags.name || `Parada ${cleanCode}`,
+                            lat: e.lat, lon: e.lon,
                             dist: getDistance(lat, lon, e.lat, e.lon)
                         };
                     }).filter(e => e.ref !== null).sort((a, b) => a.dist - b.dist);
@@ -274,13 +293,25 @@
                         return;
                     }
 
+                    // PINTAR LAS PARADAS EN EL MAPA
+                    markersLayer.clearLayers();
+                    stops.forEach(stop => {
+                        const marker = L.marker([stop.lat, stop.lon], {icon: busIcon}).addTo(markersLayer);
+                        
+                        // Añadir evento click al marcador del mapa
+                        marker.on('click', () => {
+                            map.setView([stop.lat, stop.lon], 17); // Centra la cámara en esa parada
+                            fetchBuses(stop.ref, stop.name); // Carga los buses de esa parada
+                        });
+                    });
+
                     document.getElementById('loading').innerText = "⏱️ Conectando con los buses...";
                     
+                    // Mostrar automáticamente los datos de la parada más cercana
                     let found = false;
                     for (let i = 0; i < Math.min(stops.length, 3); i++) {
                         const stop = stops[i];
-                        const url = `https://api.tmb.cat/v1/ibus/stops/${stop.ref}?app_id=${APP_ID}&app_key=${APP_KEY}`;
-                        const tmbRes = await fetch(url);
+                        const tmbRes = await fetch(`https://api.tmb.cat/v1/ibus/stops/${stop.ref}?app_id=${APP_ID}&app_key=${APP_KEY}`);
                         
                         if (tmbRes.ok) {
                             const data = await tmbRes.json();
@@ -295,7 +326,6 @@
                     }
 
                     if (!found) {
-                        document.getElementById('stopCode').value = stops[0].ref;
                         fetchBuses(stops[0].ref, stops[0].name);
                     }
 
