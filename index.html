@@ -3,61 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bus BCN - En tiempo real</title>
+    <title>Bus BCN - Próximos Buses</title>
     <style>
-        :root { --tmb-red: #e30613; --bg: #f8f9fa; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-               background: var(--bg); margin: 0; padding: 20px; color: #333; }
+        :root { --tmb-red: #e30613; --bg: #f8f9fa; --text: #333; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text); }
         
-        h2 { color: var(--tmb-red); margin-top: 0; font-size: 1.5rem; }
+        /* Cabecera y Estado */
+        .status-card { background: #fff; padding: 20px; border-radius: 15px; margin-bottom: 20px; 
+                       box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; border-bottom: 4px solid var(--tmb-red); }
+        .stop-name { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; display: block; }
+        .stop-code { font-size: 0.8rem; color: #888; text-transform: uppercase; }
         
-        #status-card { background: #fff; padding: 15px; border-radius: 12px; margin-bottom: 20px; 
-                       box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 5px solid #ccc; }
-        
-        .bus-card { background: white; padding: 18px; border-radius: 12px; margin-bottom: 12px; 
+        /* Tarjetas de Bus */
+        .bus-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 12px; 
                     display: flex; justify-content: space-between; align-items: center;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-left: 5px solid var(--tmb-red); }
-        
-        .line-box { background: var(--tmb-red); color: white; padding: 5px 10px; border-radius: 6px; 
-                    font-weight: bold; font-size: 1.2rem; min-width: 45px; text-align: center; }
-        
-        .info { flex-grow: 1; margin-left: 15px; }
-        .dest { font-size: 0.9rem; color: #666; font-weight: 500; text-transform: uppercase; }
-        
-        .time { font-size: 1.4rem; font-weight: 800; color: #2ecc71; text-align: right; }
-        .time span { font-size: 0.8rem; font-weight: normal; color: #888; margin-left: 3px; }
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .line-badge { background: var(--tmb-red); color: white; padding: 8px 12px; border-radius: 8px; 
+                      font-weight: 800; font-size: 1.3rem; min-width: 50px; text-align: center; }
+        .info { flex-grow: 1; margin: 0 15px; }
+        .dest { font-size: 0.85rem; color: #666; font-weight: 600; text-transform: uppercase; }
+        .time { font-size: 1.5rem; font-weight: 900; color: #27ae60; }
+        .time span { font-size: 0.8rem; font-weight: normal; color: #888; margin-left: 2px; }
 
-        button { width: 100%; padding: 12px; border: none; border-radius: 8px; background: #333; 
-                 color: white; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.3s; }
-        button:active { background: #000; transform: scale(0.98); }
+        /* Botón y Animaciones */
+        button { width: 100%; padding: 15px; border: none; border-radius: 12px; background: #222; 
+                 color: white; font-weight: bold; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.97); background: #000; }
         
-        .loader { border: 3px solid #f3f3f3; border-top: 3px solid var(--tmb-red); 
-                  border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid var(--tmb-red); 
+                  border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; 
+                  display: inline-block; margin-bottom: 10px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .msg { color: #888; padding: 40px; text-align: center; }
     </style>
 </head>
 <body>
 
-    <div id="status-card">
-        <div id="stop-info">Detectando ubicación...</div>
-        <button onclick="getLocation()">🔄 Actualizar tiempos</button>
+    <div class="status-card">
+        <div id="loader-container"><div class="loader"></div></div>
+        <span id="stop-info" class="stop-name">Localizando...</span>
+        <span id="stop-code" class="stop-code">Buscando parada cercana</span>
+        <button style="margin-top: 15px;" onclick="init()">🔄 Refrescar</button>
     </div>
 
     <div id="results"></div>
 
     <script>
-        // Tu API Key de TMB
-        const API_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
+        // CREDENCIALES ACTUALIZADAS
+        const APP_ID = 'f87364db';
+        const APP_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
 
-        async function getLocation() {
-            const statusDiv = document.getElementById('stop-info');
+        async function init() {
+            const stopInfo = document.getElementById('stop-info');
+            const stopCodeSpan = document.getElementById('stop-code');
             const resultsDiv = document.getElementById('results');
-            
-            statusDiv.innerHTML = '<div class="loader"></div> Localizando...';
+            const loader = document.getElementById('loader-container');
+
+            loader.style.display = 'block';
             resultsDiv.innerHTML = '';
+            stopInfo.innerText = "Localizando...";
 
             if (!navigator.geolocation) {
-                statusDiv.innerText = "Error: Tu navegador no soporta geolocalización.";
+                stopInfo.innerText = "GPS no soportado";
+                loader.style.display = 'none';
                 return;
             }
 
@@ -65,43 +73,46 @@
                 const { latitude, longitude } = pos.coords;
                 
                 try {
-                    // 1. Buscamos la parada más cercana en un radio de 500m
-                    const stopUrl = `https://api.tmb.cat/v1/planner/neareststops?lat=${latitude}&lon=${longitude}&app_id=${API_KEY}&app_key=${API_KEY}`;
+                    // 1. Buscamos parada más cercana
+                    const stopUrl = `https://api.tmb.cat/v1/planner/neareststops?lat=${latitude}&lon=${longitude}&app_id=${APP_ID}&app_key=${APP_KEY}`;
                     const stopRes = await fetch(stopUrl);
                     const stopData = await stopRes.json();
                     
                     if (!stopData.features || stopData.features.length === 0) {
-                        statusDiv.innerText = "No se encontraron paradas cerca.";
+                        stopInfo.innerText = "No hay paradas cerca";
+                        loader.style.display = 'none';
                         return;
                     }
 
                     const closestStop = stopData.features[0];
-                    const stopCode = closestStop.properties.code;
+                    const stopId = closestStop.properties.code;
                     const stopName = closestStop.properties.name;
 
-                    statusDiv.innerHTML = `📍 <b>${stopName}</b><br><small>Parada: ${stopCode}</small>`;
+                    stopInfo.innerText = stopName;
+                    stopCodeSpan.innerText = `Código de Parada: ${stopId}`;
 
-                    // 2. Consultamos iBus para ver cuánto falta
-                    const ibusUrl = `https://api.tmb.cat/v1/ibus/stops/${stopCode}?app_id=${API_KEY}&app_key=${API_KEY}`;
+                    // 2. Buscamos tiempos de llegada
+                    const ibusUrl = `https://api.tmb.cat/v1/ibus/stops/${stopId}?app_id=${APP_ID}&app_key=${APP_KEY}`;
                     const ibusRes = await fetch(ibusUrl);
                     const ibusData = await ibusRes.json();
                     
                     renderBuses(ibusData.data.ibus);
                 } catch (err) {
-                    statusDiv.innerText = "Error al conectar con TMB.";
+                    stopInfo.innerText = "Error de conexión";
                     console.error(err);
+                } finally {
+                    loader.style.display = 'none';
                 }
             }, (error) => {
-                statusDiv.innerText = "Error: Activa el GPS para usar la webapp.";
+                stopInfo.innerText = "Activa el GPS";
+                loader.style.display = 'none';
             });
         }
 
         function renderBuses(buses) {
             const container = document.getElementById('results');
-            container.innerHTML = '';
-
             if (!buses || buses.length === 0) {
-                container.innerHTML = '<p style="text-align:center; color:#999;">No hay buses próximos en esta parada.</p>';
+                container.innerHTML = '<div class="msg">No hay buses circulando ahora para esta parada.</div>';
                 return;
             }
 
@@ -109,7 +120,7 @@
                 const card = document.createElement('div');
                 card.className = 'bus-card';
                 card.innerHTML = `
-                    <div class="line-box">${bus.line}</div>
+                    <div class="line-badge">${bus.line}</div>
                     <div class="info">
                         <div class="dest">${bus.destination}</div>
                     </div>
@@ -119,8 +130,8 @@
             });
         }
 
-        // Ejecutar al abrir
-        getLocation();
+        // Arrancar al cargar la página
+        init();
     </script>
 </body>
 </html>
