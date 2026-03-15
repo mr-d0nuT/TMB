@@ -43,17 +43,16 @@
             <input type="number" id="stopCode" placeholder="Nº de parada (ej: 1234)">
             <button onclick="searchManual()">Buscar</button>
         </div>
-        <button class="btn-gps" onclick="searchGPS()">📍 Usar mi ubicación</button>
+        <button class="btn-gps" onclick="searchGPS()">📍 Encuentra mi parada</button>
     </div>
 
     <div id="errorBox" class="error-msg"></div>
-    <div id="loading" class="loading">⏳ Consultando a TMB...</div>
+    <div id="loading" class="loading"></div>
     
     <div id="stopTitle" class="stop-title"></div>
     <div id="results" class="bus-list"></div>
 
     <script>
-        // Tus credenciales correctas
         const APP_ID = 'f87364db';
         const APP_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
 
@@ -69,100 +68,160 @@
             document.getElementById('loading').style.display = 'none';
         }
 
-        async function fetchBuses(stopCode) {
+        // Fórmula matemática para calcular distancias en metros
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const p1 = lat1 * Math.PI/180;
+            const p2 = lat2 * Math.PI/180;
+            const dp = (lat2-lat1) * Math.PI/180;
+            const dl = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        async function fetchBuses(stopCode, stopName = "") {
             hideMessages();
             document.getElementById('results').innerHTML = '';
             document.getElementById('loading').style.display = 'block';
-            document.getElementById('loading').innerText = "⏳ Obteniendo tiempos de llegada...";
-            document.getElementById('stopTitle').innerText = `Parada: ${stopCode}`;
-
+            document.getElementById('loading').innerText = "⏳ Consultando a TMB...";
+            
             try {
-                // Endpoint robusto de iBus
                 const url = `https://api.tmb.cat/v1/ibus/stops/${stopCode}?app_id=${APP_ID}&app_key=${APP_KEY}`;
                 const res = await fetch(url);
                 
-                if (!res.ok) throw new Error('Parada no encontrada o sin servicio ahora mismo.');
+                if (!res.ok) throw new Error('Parada no encontrada en TMB.');
                 
                 const data = await res.json();
-                const buses = data.data.ibus;
-                
-                hideMessages();
-
-                if (!buses || buses.length === 0) {
-                    showError("No hay buses previstos para esta parada en este momento.");
-                    return;
-                }
-
-                let html = '';
-                buses.forEach(bus => {
-                    html += `
-                        <div class="bus-card">
-                            <div class="bus-line">${bus.line}</div>
-                            <div class="bus-info">
-                                <div class="bus-dest">${bus.destination}</div>
-                            </div>
-                            <div class="bus-time">${bus['t-in-min']}<span>min</span></div>
-                        </div>
-                    `;
-                });
-                document.getElementById('results').innerHTML = html;
+                renderBuses(data.data.ibus, stopCode, stopName);
 
             } catch (err) {
                 showError("Error al obtener los buses: " + err.message);
             }
         }
 
+        function renderBuses(buses, stopCode, stopName) {
+            hideMessages();
+            
+            const titleHtml = stopName ? 
+                `📍 ${stopName} <br><small style="color:#888; font-size:0.85rem">Cód: ${stopCode}</small>` : 
+                `📍 Parada: ${stopCode}`;
+            document.getElementById('stopTitle').innerHTML = titleHtml;
+
+            if (!buses || buses.length === 0) {
+                showError("No hay buses previstos para esta parada en este momento.");
+                return;
+            }
+
+            let html = '';
+            buses.forEach(bus => {
+                html += `
+                    <div class="bus-card">
+                        <div class="bus-line">${bus.line}</div>
+                        <div class="bus-info">
+                            <div class="bus-dest">${bus.destination}</div>
+                        </div>
+                        <div class="bus-time">${bus['t-in-min']}<span>min</span></div>
+                    </div>
+                `;
+            });
+            document.getElementById('results').innerHTML = html;
+        }
+
         function searchManual() {
             const code = document.getElementById('stopCode').value;
             if (!code || code.trim() === '') {
-                showError("Por favor, introduce el código de 4 números de la parada.");
+                showError("Escribe el código de la parada.");
                 return;
             }
             fetchBuses(code.trim());
         }
 
+        // EL NUEVO RADAR: Triangulación con OpenStreetMap (Bypass a la API de TMB)
         function searchGPS() {
             hideMessages();
             document.getElementById('results').innerHTML = '';
-            document.getElementById('stopTitle').innerText = "";
+            document.getElementById('stopTitle').innerHTML = '';
             document.getElementById('loading').style.display = 'block';
-            document.getElementById('loading').innerText = "📍 Buscando tu ubicación...";
+            document.getElementById('loading').innerText = "📍 Activando antena GPS...";
 
             if (!navigator.geolocation) {
-                showError("Tu móvil o navegador no soporta el GPS.");
+                showError("Tu móvil no soporta GPS.");
                 return;
             }
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
-                const { latitude, longitude } = pos.coords;
-                document.getElementById('loading').innerText = "📡 Buscando la parada más cercana...";
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                document.getElementById('loading').innerText = "📡 Buscando paradas en el mapa...";
                 
                 try {
-                    const url = `https://api.tmb.cat/v1/planner/neareststops?lat=${latitude}&lon=${longitude}&app_id=${APP_ID}&app_key=${APP_KEY}`;
-                    const res = await fetch(url);
+                    // Pedimos las paradas a OpenStreetMap en un radio de 400 metros
+                    const query = `[out:json][timeout:10];node["highway"="bus_stop"](around:400,${lat},${lon});out body;`;
+                    const osmRes = await fetch("https://overpass-api.de/api/interpreter", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: `data=${encodeURIComponent(query)}`
+                    });
                     
-                    if (!res.ok) throw new Error("La API de ubicación no responde.");
+                    if (!osmRes.ok) throw new Error("Los mapas no responden.");
+                    const osmData = await osmRes.json();
                     
-                    const data = await res.json();
-                    
-                    if (!data.features || data.features.length === 0) {
-                        showError("No se ha encontrado ninguna parada de TMB cerca de tu ubicación actual.");
+                    if (!osmData.elements || osmData.elements.length === 0) {
+                        showError("No estás a menos de 400m de ninguna parada.");
                         return;
                     }
 
-                    // Extraemos el código de la parada más cercana
-                    const stopCode = data.features[0].properties.code;
-                    document.getElementById('stopCode').value = stopCode; // Lo ponemos en la caja
+                    // Limpiamos los datos y calculamos la más cercana
+                    const stops = osmData.elements.map(e => {
+                        // Extraemos cualquier código numérico de las etiquetas de la parada
+                        let codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
+                        let cleanCode = codeStr.replace(/\D/g, ''); // Deja solo los números
+                        
+                        return {
+                            ref: (cleanCode.length > 0 && cleanCode.length <= 4) ? cleanCode : null,
+                            name: e.tags.name || `Parada ${cleanCode}`,
+                            dist: getDistance(lat, lon, e.lat, e.lon)
+                        };
+                    }).filter(e => e.ref !== null).sort((a, b) => a.dist - b.dist);
+
+                    if (stops.length === 0) {
+                        showError("Hay paradas cerca, pero no tienen un código TMB asignado en el mapa.");
+                        return;
+                    }
+
+                    document.getElementById('loading').innerText = "⏱️ Conectando con los buses...";
                     
-                    // Buscamos los buses de esa parada
-                    fetchBuses(stopCode);
+                    // Probamos las 3 paradas más cercanas por si alguna está fuera de servicio
+                    let found = false;
+                    for (let i = 0; i < Math.min(stops.length, 3); i++) {
+                        const stop = stops[i];
+                        const url = `https://api.tmb.cat/v1/ibus/stops/${stop.ref}?app_id=${APP_ID}&app_key=${APP_KEY}`;
+                        const tmbRes = await fetch(url);
+                        
+                        if (tmbRes.ok) {
+                            const data = await tmbRes.json();
+                            if (data.data && data.data.ibus && data.data.ibus.length > 0) {
+                                document.getElementById('stopCode').value = stop.ref;
+                                renderBuses(data.data.ibus, stop.ref, stop.name);
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Si no había buses en las más cercanas, mostramos la primera aunque esté vacía
+                    if (!found) {
+                        document.getElementById('stopCode').value = stops[0].ref;
+                        fetchBuses(stops[0].ref, stops[0].name);
+                    }
 
                 } catch (err) {
-                    showError("El radar de paradas ha fallado. Por favor, mira el número de la marquesina y escríbelo en la caja de arriba.");
+                    showError("Error de red al buscar en el mapa: " + err.message);
                 }
             }, (err) => {
-                showError("No se pudo acceder al GPS. Asegúrate de darle permisos a la web o busca por código de parada.");
-            }, { timeout: 10000 }); // Máximo 10 segundos buscando
+                showError("No has dado permiso al GPS o está desactivado.");
+            }, { timeout: 10000 });
         }
     </script>
 </body>
