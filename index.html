@@ -366,10 +366,12 @@
         // --- 3. MAPA (CARTO Voyager: gratis, sin API key, estética tipo Google Maps) ---
         const darkScheme = window.matchMedia('(prefers-color-scheme: dark)');
 
+        // Positron/dark: estilos sin iconos de comercios ni POIs — solo calles,
+        // para que el transporte público destaque sobre el mapa
         function tileURL() {
             return darkScheme.matches
                 ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+                : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
         }
 
         function initMap() {
@@ -385,21 +387,39 @@
             darkScheme.addEventListener('change', () => tileLayer.setUrl(tileURL()));
         }
 
+        // Señales tipo cartel, una forma y color por modo para que se distingan
+        // de un vistazo: Ⓜ cuadrado rojo, Ⓣ cuadrado verde, bus redondo rojo
         function stopPinIcon(type, selected) {
-            const colors = { bus: '#e8554a', metro: '#CE1126', tram: '#008e78' };
-            const color = colors[type] || colors.bus;
-            const glyph = type === 'metro'
-                ? '<text x="17" y="21" font-size="15" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial">M</text>'
-                : `<text x="17" y="22" font-size="14" text-anchor="middle">${type === 'tram' ? '🚊' : '🚌'}</text>`;
+            let badge;
+            if (type === 'metro') {
+                badge = `<rect x="3" y="3" width="32" height="32" rx="8" fill="#e1051e" stroke="#fff" stroke-width="3"/>
+                         <text x="19" y="27" font-size="22" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial, sans-serif">M</text>`;
+            } else if (type === 'tram') {
+                badge = `<rect x="3" y="3" width="32" height="32" rx="8" fill="#008e78" stroke="#fff" stroke-width="3"/>
+                         <text x="19" y="27" font-size="22" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial, sans-serif">T</text>`;
+            } else {
+                badge = `<circle cx="19" cy="19" r="16" fill="#da291c" stroke="#fff" stroke-width="3"/>
+                         <g fill="#fff">
+                           <rect x="11" y="10" width="16" height="13" rx="3"/>
+                           <rect x="13" y="12.5" width="12" height="5" rx="1" fill="#da291c"/>
+                           <circle cx="14.5" cy="25" r="2.2"/>
+                           <circle cx="23.5" cy="25" r="2.2"/>
+                         </g>`;
+            }
             return L.divIcon({
                 className: '',
                 html: `<div class="stop-pin ${selected ? 'selected' : ''}">
-                        <svg width="34" height="42" viewBox="0 0 34 42">
-                          <path d="M17 1C8.7 1 2 7.7 2 16c0 10.5 15 25 15 25s15-14.5 15-25C32 7.7 25.3 1 17 1z" fill="${color}" stroke="#fff" stroke-width="2"/>
-                          ${glyph}
+                        <svg width="38" height="50" viewBox="0 0 38 50">
+                          <ellipse cx="19" cy="47" rx="5" ry="2" fill="rgba(0,0,0,.25)"/>
+                          <line x1="19" y1="35" x2="19" y2="46" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+                          <line x1="19" y1="35" x2="19" y2="46" stroke="#5f6670" stroke-width="2.5" stroke-linecap="round"/>
+                          ${badge}
+                          ${selected ? (type === 'bus'
+                              ? '<circle cx="19" cy="19" r="18" fill="none" stroke="#1a73e8" stroke-width="2.5"/>'
+                              : '<rect x="1" y="1" width="36" height="36" rx="10" fill="none" stroke="#1a73e8" stroke-width="2.5"/>') : ''}
                         </svg>
                        </div>`,
-                iconSize: [34, 42], iconAnchor: [17, 41], popupAnchor: [0, -38]
+                iconSize: [38, 50], iconAnchor: [19, 47], popupAnchor: [0, -42]
             });
         }
         const userIcon = L.divIcon({
@@ -950,7 +970,9 @@
                 markersLayer.clearLayers();
                 stopMarkers = {};
                 nearbyStops.forEach(stop => {
-                    const marker = L.marker([stop.lat, stop.lon], { icon: stopPinIcon(stop.type, false) }).addTo(markersLayer);
+                    // metro y tram por encima: hay más paradas de bus y taparían sus señales
+                    const z = stop.type === 'metro' ? 200 : (stop.type === 'tram' ? 150 : 0);
+                    const marker = L.marker([stop.lat, stop.lon], { icon: stopPinIcon(stop.type, false), zIndexOffset: z }).addTo(markersLayer);
                     marker.bindPopup(`<b>${esc(stop.name)}</b><br><small>${MODE_NAME[stop.type]} · a ${fmtDist(stop.dist)}</small>`);
                     marker.on('click', () => {
                         map.setView([stop.lat, stop.lon], 17);
