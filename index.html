@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#da291c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="description" content="Consulta en tiempo real los próximos buses TMB de la parada más cercana a tu ubicación en Barcelona.">
-    <title>Bus BCN</title>
+    <meta name="description" content="Consulta en tiempo real los próximos buses, metros y trams de la parada más cercana a tu ubicación en Barcelona.">
+    <title>Transport BCN</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚍</text></svg>">
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -27,6 +27,7 @@
             --green: #0a8f4e;
             --amber: #c77700;
             --blue: #1a73e8;
+            --tram: #008e78;
             --shadow: 0 1px 3px rgba(16,24,40,.08), 0 4px 12px rgba(16,24,40,.06);
             --shadow-lg: 0 8px 24px rgba(16,24,40,.14);
             --radius: 16px;
@@ -42,6 +43,7 @@
                 --chip-bg: #232931;
                 --green: #34c373;
                 --amber: #f0a437;
+                --tram: #15b89d;
                 --shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
                 --shadow-lg: 0 8px 24px rgba(0,0,0,.5);
             }
@@ -75,8 +77,8 @@
             -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
             border-bottom: 1px solid var(--border);
         }
-        .topbar h1 { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -.3px; display: flex; align-items: center; gap: 8px; }
-        .topbar h1 .dot { color: var(--primary); }
+        .topbar h1 { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: -.3px; }
+        .topbar .subtitle { font-size: .68rem; font-weight: 700; color: var(--text-faint); letter-spacing: .6px; text-transform: uppercase; margin-top: 1px; }
         .live-badge {
             font-size: .7rem; font-weight: 700; color: var(--green);
             display: flex; align-items: center; gap: 5px; text-transform: uppercase; letter-spacing: .5px;
@@ -105,7 +107,6 @@
         .leaflet-popup-tip { background: var(--card); }
         .leaflet-bar a { background: var(--card) !important; color: var(--text) !important; border-color: var(--border) !important; }
 
-        .stop-pin { position: relative; }
         .stop-pin svg { filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); transition: transform .15s; transform-origin: bottom center; }
         .stop-pin.selected svg { transform: scale(1.25); }
         .user-dot-wrap { position: relative; }
@@ -147,14 +148,15 @@
             flex-shrink: 0; display: flex; align-items: center; gap: 7px;
             background: var(--chip-bg); border: 1px solid var(--border); border-radius: 999px;
             padding: 9px 14px; font-size: .85rem; font-weight: 600; color: var(--text);
-            cursor: pointer; box-shadow: var(--shadow); transition: transform .12s; max-width: 250px;
+            cursor: pointer; box-shadow: var(--shadow); transition: transform .12s; max-width: 260px;
         }
         .chip:active { transform: scale(.96); }
         .chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
         .chip.active .chip-dist, .chip.active .chip-star { color: rgba(255,255,255,.85); }
         .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .chip-dist { font-size: .75rem; color: var(--text-faint); font-weight: 700; }
+        .chip-dist { font-size: .75rem; color: var(--text-faint); font-weight: 700; white-space: nowrap; }
         .chip-star { color: var(--amber); }
+        .chip-mode { font-size: .95rem; }
 
         /* ---------- PARADA ACTUAL ---------- */
         .stop-card {
@@ -192,7 +194,7 @@
         .sk { background: linear-gradient(90deg, var(--border) 25%, color-mix(in srgb, var(--border) 40%, var(--card)) 50%, var(--border) 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; border-radius: 8px; }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-        /* ---------- TARJETAS DE BUS ---------- */
+        /* ---------- TARJETAS DE LLEGADAS ---------- */
         .bus-list { display: flex; flex-direction: column; gap: 10px; }
         .bus-card {
             background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
@@ -208,6 +210,7 @@
         .bus-info { flex: 1; min-width: 0; }
         .bus-dest { font-size: .82rem; color: var(--text-soft); font-weight: 700; text-transform: uppercase; letter-spacing: .2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .bus-dest-label { font-size: .68rem; color: var(--text-faint); font-weight: 600; }
+        .bus-next { font-size: .72rem; color: var(--text-faint); font-weight: 600; margin-top: 2px; }
         .bus-eta { text-align: right; }
         .bus-time { font-size: 1.55rem; font-weight: 900; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1; }
         .bus-time small { font-size: .75rem; font-weight: 600; color: var(--text-faint); margin-left: 3px; }
@@ -245,18 +248,21 @@
     </div>
 
     <header class="topbar">
-        <h1>🚍 Bus BCN <span class="dot">•</span></h1>
+        <div>
+            <h1>🚍 Transport BCN</h1>
+            <div class="subtitle">Bus · Metro · Tram</div>
+        </div>
         <div class="live-badge">En directo</div>
     </header>
 
     <main>
         <div class="map-wrap">
             <div id="map"></div>
-            <button class="map-fab" onclick="searchGPS()" title="Buscar paradas cerca de mí" aria-label="Buscar paradas cerca de mí">📍</button>
+            <button class="map-fab" onclick="searchGPS()" title="Buscar transporte cerca de mí" aria-label="Buscar transporte cerca de mí">📍</button>
         </div>
 
         <div class="controls">
-            <input type="number" id="stopCode" placeholder="Nº de parada" inputmode="numeric" onkeydown="if(event.key==='Enter')searchManual()">
+            <input type="number" id="stopCode" placeholder="Nº parada de bus" inputmode="numeric" onkeydown="if(event.key==='Enter')searchManual()">
             <button class="btn btn-search" onclick="searchManual()">Buscar</button>
             <button class="btn btn-gps" onclick="searchGPS()">📍 Cerca de mí</button>
         </div>
@@ -291,7 +297,7 @@
 
         <div id="results" class="bus-list"></div>
 
-        <footer>Datos en tiempo real de TMB · Mapa © OpenStreetMap © CARTO</footer>
+        <footer>Datos en tiempo real de TMB y TRAM · Mapa © OpenStreetMap © CARTO</footer>
     </main>
 
     <script>
@@ -307,6 +313,7 @@
         // --- 2. CONSTANTES Y ESTADO ---
         const APP_ID = 'f87364db';
         const APP_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
+        const TMB_AUTH = `app_id=${APP_ID}&app_key=${APP_KEY}`;
         const REFRESH_SECONDS = 20;
 
         const OVERPASS_ENDPOINTS = [
@@ -315,26 +322,46 @@
             "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
         ];
 
+        // La API del TRAM no envía cabeceras CORS: hay que pasar por un proxy público
+        const TRAM_PROXIES = [
+            u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+            u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u)
+        ];
+
+        // Paradas del TRAM (red estable, incrustada para no depender del proxy al buscarlas)
+        // [nombre, lat, lon, código ida, código vuelta]
+        const TRAM_STOPS = [["Francesc Macià",41.3922,2.14317,1001,1101],["L'Illa",41.39056,2.1365,1002,1102],["Numància",41.38934,2.13195,1003,1103],["Maria Cristina",41.38797,2.12651,1004,1104],["Pius XII",41.38672,2.1216,1005,1105],["Palau Reial",41.38592,2.11846,1008,1108],["Zona Universitària",41.38427,2.11444,1009,1109],["Avinguda de Xile",41.38074,2.11484,1010,1110],["Ernest Lluch",41.37648,2.11079,1011,1111],["Can Rigal",41.37612,2.10593,1012,1112],["Ca n'Oliveres",41.37661,2.09841,1013,1113],["Can Clota",41.37696,2.09352,1213,1313],["Pont d'Esplugues",41.37683,2.08861,1014,1114],["La Sardana",41.37279,2.084,1015,1115],["Montesa",41.36956,2.08093,1016,1116],["El Pedró",41.36532,2.07667,1017,1117],["Ignasi Iglésias",41.36124,2.07267,1018,1118],["Cornellà Centre",41.35744,2.06992,1019,1119],["Les Aigües",41.35667,2.06607,1020,1120],["Fontsanta | Fatjó",41.36034,2.06222,1021,1121],["Bon Viatge",41.36461,2.05882,1022,1122],["Centre Miquel Martí i Pol",41.36866,2.0712,1026,1126],["La Fontsanta",41.36779,2.06295,1025,1125],["Llevant - Les planes",41.37087,2.07612,1027,1127],["Hospital Sant Joan Despí | TV3",41.37239,2.07568,1028,1128],["Rambla de Sant Just",41.37883,2.07505,1029,1129],["Walden",41.37972,2.0669,1030,1130],["Torreblanca",41.37976,2.06082,1031,1131],["Sant Feliu | Consell Comarcal",41.37936,2.05337,1032,1132],["Ciutadella | Vila Olímpica",41.38762,2.19192,2020,2120],["Wellington | UPF",41.39017,2.18848,2021,2121],["Marina",41.39406,2.18692,2022,2122],["Auditori | Teatre Nacional",41.39754,2.18689,2002,2102],["Glòries",41.40168,2.1869,2003,2103],["Ca l'Aranyó",41.40445,2.1915,2004,2104],["Pere IV",41.40614,2.19825,2005,2105],["Fluvià",41.40782,2.20491,2006,2106],["Selva de Mar",41.40919,2.21045,2007,2107],["El Maresme",41.41049,2.21563,2008,2108],["Fòrum",41.41183,2.21985,2009,2109],["Campus Diagonal - Besòs",41.41525,2.22293,2010,2110],["Port Fòrum",41.41887,2.22616,2029,2129],["Estació de Sant Adrià",41.42395,2.23055,2030,2130],["Can Jaumandreu",41.40811,2.1936,2023,2123],["Espronceda",41.41136,2.19794,2024,2124],["Sant Martí de Provençals",41.41647,2.20474,2025,2125],["Besòs",41.42007,2.20956,2026,2126],["Alfons el Magnànim",41.41719,2.21357,2027,2127],["Parc del Besòs",41.41943,2.21763,2028,2128],["La Catalana",41.42265,2.22195,2013,2113],["Sant Joan Baptista",41.42739,2.2254,2014,2114],["Encants de Sant Adrià",41.43024,2.22261,2016,2116],["Sant Roc",41.43494,2.2276,2017,2117],["Gorg",41.43997,2.23322,2019,2119],["La Mina",41.41838,2.221,2111,2011],["Verdaguer",41.39843,2.16743,2034,2134],["Sicília",41.40015,2.17429,2033,2133],["Monumental",41.4019,2.18117,2032,2132]];
+
+        // Recorridos de cada línea de TRAM en orden (estáticos, así el itinerario
+        // no depende del proxy): { línea: [[nombre, lat, lon], ...] }
+        const TRAM_LINES = {"1":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["El Pedró",41.36532,2.07667],["Ignasi Iglésias",41.36124,2.07267],["Cornellà Centre",41.35744,2.06992],["Les Aigües",41.35667,2.06607],["Fontsanta | Fatjó",41.36034,2.06222],["Bon Viatge",41.36461,2.05882]],"2":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["El Pedró",41.36532,2.07667],["Ignasi Iglésias",41.36124,2.07267],["Cornellà Centre",41.35744,2.06992],["Les Aigües",41.35667,2.06607],["Fontsanta | Fatjó",41.36034,2.06222],["Bon Viatge",41.36461,2.05882],["La Fontsanta",41.36779,2.06295],["Centre Miquel Martí i Pol",41.36866,2.0712],["Llevant - Les planes",41.37087,2.07612]],"3":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["Hospital Sant Joan Despí | TV3",41.37239,2.07568],["Rambla de Sant Just",41.37883,2.07505],["Walden",41.37972,2.0669],["Torreblanca",41.37976,2.06082],["Sant Feliu | Consell Comarcal",41.37936,2.05337]],"4":[["Verdaguer",41.39843,2.16743],["Sicília",41.40015,2.17429],["Monumental",41.4019,2.18117],["Glòries",41.40168,2.1869],["Ca l'Aranyó",41.40445,2.1915],["Pere IV",41.40614,2.19825],["Fluvià",41.40782,2.20491],["Selva de Mar",41.40919,2.21045],["El Maresme",41.41049,2.21563],["Fòrum",41.41183,2.21985],["Campus Diagonal - Besòs",41.41525,2.22293],["Port Fòrum",41.41887,2.22616],["Estació de Sant Adrià",41.42395,2.23055]],"5":[["Ciutadella | Vila Olímpica",41.38762,2.19192],["Wellington | UPF",41.39017,2.18848],["Marina",41.39406,2.18692],["Auditori | Teatre Nacional",41.39754,2.18689],["Glòries",41.40168,2.1869],["Can Jaumandreu",41.40811,2.1936],["Espronceda",41.41136,2.19794],["Sant Martí de Provençals",41.41647,2.20474],["Besòs",41.42007,2.20956],["Alfons el Magnànim",41.41719,2.21357],["Parc del Besòs",41.41943,2.21763],["La Catalana",41.42265,2.22195],["Sant Joan Baptista",41.42739,2.2254],["Encants de Sant Adrià",41.43024,2.22261],["Sant Roc",41.43494,2.2276],["Gorg",41.43997,2.23322]],"6":[["Ciutadella | Vila Olímpica",41.38762,2.19192],["Wellington | UPF",41.39017,2.18848],["Marina",41.39406,2.18692],["Auditori | Teatre Nacional",41.39754,2.18689],["Glòries",41.40168,2.1869],["Can Jaumandreu",41.40811,2.1936],["Espronceda",41.41136,2.19794],["Sant Martí de Provençals",41.41647,2.20474],["Besòs",41.42007,2.20956],["Alfons el Magnànim",41.41719,2.21357],["Parc del Besòs",41.41943,2.21763],["La Mina",41.41838,2.221],["Port Fòrum",41.41887,2.22616],["Estació de Sant Adrià",41.42395,2.23055]]};
+
         let map, markersLayer, userMarkerLayer, routeLayer, tileLayer;
         let countdownInterval = null;
         let secondsLeft = REFRESH_SECONDS;
-        let currentStop = null;          // { code, name }
-        let nearbyStops = [];            // [{ ref, name, lat, lon, dist }]
-        let stopMarkers = {};            // ref -> L.marker
-        let activeRoute = null;          // { line, routeId }
+        let currentStop = null;          // { type:'bus'|'metro'|'tram', name, ... }
+        let nearbyStops = [];
+        let stopMarkers = {};            // stopKey -> L.marker
+        let activeRoute = null;          // { key, ... } itinerario desplegado
         let activeRouteHTML = "";
         let fetchSeq = 0;                // descarta respuestas obsoletas
 
-        // Colores oficiales por familia de línea TMB
-        function lineColor(line) {
+        const MODE_ICON = { bus: '🚌', metro: 'Ⓜ️', tram: '🚊' };
+        const MODE_NAME = { bus: 'Bus', metro: 'Metro', tram: 'Tram' };
+
+        // Colores oficiales TMB por familia de línea de bus
+        function busColor(line) {
             const l = String(line).toUpperCase();
             if (l.startsWith('H')) return '#003888';
             if (l.startsWith('V')) return '#6ab023';
             if (l.startsWith('D')) return '#93107e';
             if (l.startsWith('X')) return '#1a1a1a';
-            if (l.startsWith('M')) return '#da291c';
             return '#da291c';
         }
+        // Colores oficiales de las líneas de metro
+        const METRO_COLORS = { L1:'#CE1126', L2:'#93248F', L3:'#1EB53A', L4:'#F7A30E', L5:'#005A97', L9:'#FB712B', L9N:'#FB712B', L9S:'#FB712B', L10:'#00A6D6', L10N:'#00A6D6', L10S:'#00A6D6', L11:'#89B94C', FM:'#004C38' };
+        const metroColor = l => METRO_COLORS[String(l).toUpperCase()] || '#CE1126';
+        const TRAM_COLOR = '#008e78';
 
         // --- 3. MAPA (CARTO Voyager: gratis, sin API key, estética tipo Google Maps) ---
         const darkScheme = window.matchMedia('(prefers-color-scheme: dark)');
@@ -358,14 +385,18 @@
             darkScheme.addEventListener('change', () => tileLayer.setUrl(tileURL()));
         }
 
-        function stopPinIcon(selected) {
-            const color = selected ? '#da291c' : '#e8554a';
+        function stopPinIcon(type, selected) {
+            const colors = { bus: '#e8554a', metro: '#CE1126', tram: '#008e78' };
+            const color = colors[type] || colors.bus;
+            const glyph = type === 'metro'
+                ? '<text x="17" y="21" font-size="15" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial">M</text>'
+                : `<text x="17" y="22" font-size="14" text-anchor="middle">${type === 'tram' ? '🚊' : '🚌'}</text>`;
             return L.divIcon({
                 className: '',
                 html: `<div class="stop-pin ${selected ? 'selected' : ''}">
                         <svg width="34" height="42" viewBox="0 0 34 42">
                           <path d="M17 1C8.7 1 2 7.7 2 16c0 10.5 15 25 15 25s15-14.5 15-25C32 7.7 25.3 1 17 1z" fill="${color}" stroke="#fff" stroke-width="2"/>
-                          <text x="17" y="22" font-size="14" text-anchor="middle">🚌</text>
+                          ${glyph}
                         </svg>
                        </div>`,
                 iconSize: [34, 42], iconAnchor: [17, 41], popupAnchor: [0, -38]
@@ -389,7 +420,7 @@
             }
         };
 
-        // --- 5. UTILIDADES UI ---
+        // --- 5. UTILIDADES ---
         function showError(msg, retryFn) {
             const errBox = document.getElementById('errorBox');
             errBox.innerHTML = msg + (retryFn ? `<br><button class="btn" onclick="${retryFn}()">Reintentar</button>` : '');
@@ -422,6 +453,9 @@
         const fmtDist = m => m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`;
         const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
+        // Identificador único de una parada (para chips, marcadores y favoritos)
+        const stopKey = s => `${s.type}:${s.type === 'bus' ? s.code : (s.type === 'metro' ? s.id : s.out)}`;
+
         // --- 6. AUTO-REFRESCO ---
         function startCountdown() {
             stopCountdown();
@@ -431,7 +465,7 @@
                 secondsLeft--;
                 if (secondsLeft <= 0) {
                     secondsLeft = REFRESH_SECONDS;
-                    if (currentStop) fetchBuses(currentStop.code, currentStop.name, true);
+                    if (currentStop) fetchArrivals(currentStop, true);
                 }
                 updateProgress();
             }, 1000);
@@ -450,94 +484,103 @@
         function refreshNow() {
             if (currentStop) {
                 secondsLeft = REFRESH_SECONDS;
-                fetchBuses(currentStop.code, currentStop.name, true);
+                fetchArrivals(currentStop, true);
             }
         }
         // Pausa el refresco cuando la app está en segundo plano
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) { clearInterval(countdownInterval); countdownInterval = null; }
-            else if (currentStop) { fetchBuses(currentStop.code, currentStop.name, true); startCountdown(); }
+            else if (currentStop) { fetchArrivals(currentStop, true); startCountdown(); }
         });
 
         // --- 7. FAVORITOS (localStorage) ---
         function getFavs() {
-            try { return JSON.parse(localStorage.getItem('busbcn_favs') || '[]'); } catch { return []; }
+            try {
+                const favs = JSON.parse(localStorage.getItem('busbcn_favs') || '[]');
+                return favs.map(f => f.type ? f : { type: 'bus', code: f.code, name: f.name }); // migra favoritos antiguos
+            } catch { return []; }
         }
         function saveFavs(favs) { localStorage.setItem('busbcn_favs', JSON.stringify(favs)); }
-        function isFav(code) { return getFavs().some(f => f.code == code); }
+        function isFav(stop) { return getFavs().some(f => stopKey(f) === stopKey(stop)); }
         function toggleFav() {
             if (!currentStop) return;
             let favs = getFavs();
-            if (isFav(currentStop.code)) favs = favs.filter(f => f.code != currentStop.code);
-            else favs.push({ code: currentStop.code, name: currentStop.name || `Parada ${currentStop.code}` });
+            if (isFav(currentStop)) favs = favs.filter(f => stopKey(f) !== stopKey(currentStop));
+            else {
+                const { type, name, code, id, out, ret } = currentStop;
+                favs.push({ type, name, code, id, out, ret });
+            }
             saveFavs(favs);
             updateFavBtn();
             renderFavs();
         }
         function updateFavBtn() {
-            const btn = document.getElementById('favBtn');
-            btn.classList.toggle('faved', currentStop && isFav(currentStop.code));
+            document.getElementById('favBtn').classList.toggle('faved', currentStop && isFav(currentStop));
         }
         function renderFavs() {
             const favs = getFavs();
             const section = document.getElementById('favSection');
             section.style.display = favs.length ? 'block' : 'none';
-            document.getElementById('favChips').innerHTML = favs.map(f => `
-                <div class="chip ${currentStop && currentStop.code == f.code ? 'active' : ''}" onclick="selectStopByCode('${esc(f.code)}', '${esc(f.name)}')">
+            document.getElementById('favChips').innerHTML = favs.map((f, i) => `
+                <div class="chip ${currentStop && stopKey(currentStop) === stopKey(f) ? 'active' : ''}" onclick="selectFav(${i})">
                     <span class="chip-star">★</span>
+                    <span class="chip-mode">${MODE_ICON[f.type]}</span>
                     <span class="chip-name">${esc(f.name)}</span>
                 </div>`).join('');
+        }
+        function selectFav(i) {
+            const f = getFavs()[i];
+            if (f) fetchArrivals(f);
         }
 
         // --- 8. PARADAS CERCANAS (chips + marcadores) ---
         function renderNearbyChips() {
             const section = document.getElementById('nearbySection');
             section.style.display = nearbyStops.length ? 'block' : 'none';
-            document.getElementById('nearbyChips').innerHTML = nearbyStops.map(s => `
-                <div class="chip ${currentStop && currentStop.code == s.ref ? 'active' : ''}" data-ref="${esc(s.ref)}" onclick="selectNearbyStop('${esc(s.ref)}')">
+            document.getElementById('nearbyChips').innerHTML = nearbyStops.map((s, i) => `
+                <div class="chip ${currentStop && stopKey(currentStop) === stopKey(s) ? 'active' : ''}" onclick="selectNearbyStop(${i})">
+                    <span class="chip-mode">${MODE_ICON[s.type]}</span>
                     <span class="chip-name">${esc(s.name)}</span>
                     <span class="chip-dist">${fmtDist(s.dist)}</span>
                 </div>`).join('');
         }
-        function selectNearbyStop(ref) {
-            const stop = nearbyStops.find(s => s.ref == ref);
+        function selectNearbyStop(i) {
+            const stop = nearbyStops[i];
             if (!stop) return;
             map.setView([stop.lat, stop.lon], 17);
-            fetchBuses(stop.ref, stop.name);
-        }
-        function selectStopByCode(code, name) {
-            fetchBuses(code, name);
+            fetchArrivals(stop);
         }
         function highlightMarkers() {
-            Object.entries(stopMarkers).forEach(([ref, marker]) => {
-                marker.setIcon(stopPinIcon(currentStop && currentStop.code == ref));
+            Object.entries(stopMarkers).forEach(([key, marker]) => {
+                marker.setIcon(stopPinIcon(key.split(':')[0], currentStop && stopKey(currentStop) === key));
             });
         }
 
-        // --- 9. TIEMPOS DE LLEGADA (TMB iBus) ---
-        async function fetchBuses(stopCode, stopName = "", isSilent = false) {
+        // --- 9. LLEGADAS: DESPACHO POR TIPO ---
+        async function fetchArrivals(stop, isSilent = false) {
             const seq = ++fetchSeq;
-            currentStop = { code: stopCode, name: stopName };
+            currentStop = stop;
 
             if (!isSilent) {
                 hideError();
                 setLoading(null);
                 showSkeleton();
-                document.getElementById('stopCode').value = stopCode;
+                if (stop.type === 'bus') document.getElementById('stopCode').value = stop.code;
                 routeLayer.clearLayers();
                 activeRoute = null;
                 activeRouteHTML = "";
             }
 
             try {
-                const url = `https://api.tmb.cat/v1/ibus/stops/${stopCode}?app_id=${APP_ID}&app_key=${APP_KEY}`;
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('Parada no encontrada en TMB.');
-                const data = await res.json();
+                let departures;
+                if (stop.type === 'bus') departures = await fetchBusArrivals(stop);
+                else if (stop.type === 'metro') departures = await fetchMetroArrivals(stop);
+                else departures = await fetchTramArrivals(stop);
+
                 if (seq !== fetchSeq) return; // llegó tarde: el usuario ya pidió otra parada
 
-                renderStopCard(stopCode, stopName);
-                renderBuses(data.data.ibus, stopCode, isSilent);
+                renderStopCard(stop);
+                renderDepartures(departures, isSilent);
                 renderFavs();
                 renderNearbyChips();
                 highlightMarkers();
@@ -546,49 +589,54 @@
                 if (seq !== fetchSeq) return;
                 if (!isSilent) {
                     document.getElementById('results').innerHTML = '';
-                    showError("No se han podido obtener los buses: " + err.message);
+                    renderStopCard(stop);
+                    showError("No se han podido obtener los tiempos: " + err.message);
                 }
             }
         }
 
-        function renderStopCard(stopCode, stopName) {
+        function renderStopCard(stop) {
             document.getElementById('stopCard').style.display = 'block';
-            document.getElementById('stopName').innerText = stopName || `Parada ${stopCode}`;
-            document.getElementById('stopCodeLabel').innerText = `Código ${stopCode}`;
+            document.getElementById('stopName').innerText = stop.name || `Parada ${stop.code || ''}`;
+            const sub = stop.type === 'bus' ? `${MODE_ICON.bus} Bus · Parada ${stop.code}`
+                      : stop.type === 'metro' ? `${MODE_ICON.metro} Metro${stop.lines ? ' · ' + stop.lines : ''}`
+                      : `${MODE_ICON.tram} Tram`;
+            document.getElementById('stopCodeLabel').innerText = sub;
             updateFavBtn();
         }
 
-        function etaHTML(min) {
-            if (min <= 0) return `<div class="bus-time now">Llegando</div>`;
-            const cls = min <= 3 ? 'soon' : '';
-            return `<div class="bus-time ${cls}">${min}<small>min</small></div>`;
+        // Modelo unificado de salida:
+        // { line, color, dest, mins, next (texto opcional), itin (datos para el desplegable) }
+        function etaHTML(mins) {
+            if (mins <= 0) return `<div class="bus-time now">Llegando</div>`;
+            return `<div class="bus-time ${mins <= 3 ? 'soon' : ''}">${mins}<small>min</small></div>`;
         }
 
-        function renderBuses(buses, stopCode, isSilent) {
+        function renderDepartures(departures, isSilent) {
             hideError();
             setLoading(null);
             const container = document.getElementById('results');
 
-            if (!buses || buses.length === 0) {
-                container.innerHTML = `<div class="empty-state"><div class="big">🌙</div>No hay buses previstos para esta parada ahora mismo.</div>`;
+            if (!departures || departures.length === 0) {
+                container.innerHTML = `<div class="empty-state"><div class="big">🌙</div>Sin llegadas previstas ahora mismo en esta parada.</div>`;
                 return;
             }
 
-            const sorted = [...buses].sort((a, b) => a['t-in-min'] - b['t-in-min']);
+            departures.sort((a, b) => a.mins - b.mins);
+            window._departures = departures; // referencia para los desplegables
             let html = '';
-            sorted.forEach(bus => {
-                const animClass = isSilent ? 'blink' : '';
-                const isExpanded = activeRoute && activeRoute.line === bus.line;
-                const color = lineColor(bus.line);
+            departures.forEach((d, i) => {
+                const isExpanded = activeRoute && activeRoute.key === d.itinKey;
                 html += `
                     <div class="bus-card ${isExpanded ? 'open' : ''}">
-                        <div class="bus-card-content ${animClass}" onclick="toggleRoute('${esc(bus.line)}', '${esc(bus.routeId)}', '${esc(stopCode)}', this.parentElement)">
-                            <div class="bus-line" style="background:${color}">${esc(bus.line)}</div>
+                        <div class="bus-card-content ${isSilent ? 'blink' : ''}" onclick="toggleItinerary(${i}, this.parentElement)">
+                            <div class="bus-line" style="background:${d.color}">${esc(d.line)}</div>
                             <div class="bus-info">
                                 <div class="bus-dest-label">hacia</div>
-                                <div class="bus-dest">${esc(bus.destination)}</div>
+                                <div class="bus-dest">${esc(d.dest)}</div>
+                                ${d.next ? `<div class="bus-next">${esc(d.next)}</div>` : ''}
                             </div>
-                            <div class="bus-eta">${etaHTML(bus['t-in-min'])}</div>
+                            <div class="bus-eta">${etaHTML(d.mins)}</div>
                             <div class="bus-chevron">▼</div>
                         </div>
                         <div class="bus-itinerary" style="display:${isExpanded ? 'block' : 'none'}" onclick="event.stopPropagation()">
@@ -599,10 +647,85 @@
             container.innerHTML = html;
         }
 
-        // --- 10. ITINERARIO DE LÍNEA ---
-        // La API necesita el código numérico de línea (p.ej. V15 = 215). El routeId del
-        // iBus lo lleva incluido: routeId "2151" = línea 215, sentido 1.
-        async function toggleRoute(line, routeId, stopCode, cardElement) {
+        // --- 10. LLEGADAS POR MODO ---
+        async function fetchBusArrivals(stop) {
+            const res = await fetch(`https://api.tmb.cat/v1/ibus/stops/${stop.code}?${TMB_AUTH}`);
+            if (!res.ok) throw new Error('Parada de bus no encontrada en TMB.');
+            const data = await res.json();
+            return (data.data.ibus || []).map(b => ({
+                line: b.line, color: busColor(b.line), dest: b.destination,
+                mins: b['t-in-min'], next: null,
+                itinKey: `bus:${b.routeId}`, itin: { mode: 'bus', routeId: b.routeId, stopCode: stop.code }
+            }));
+        }
+
+        async function fetchMetroArrivals(stop) {
+            const res = await fetch(`https://api.tmb.cat/v1/imetro/estacions/${stop.id}?${TMB_AUTH}`);
+            if (!res.ok) throw new Error('Estación de metro no disponible.');
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) {
+                throw new Error('Esta estación no ofrece tiempos en tiempo real (líneas automáticas L9/L10).');
+            }
+            return data.filter(via => via.propers_trens && via.propers_trens.length > 0).map(via => {
+                const t = via.propers_trens;
+                const mins = Math.max(0, Math.round(t[0].temps_restant / 60));
+                return {
+                    line: t[0].nom_linia, color: metroColor(t[0].nom_linia), dest: t[0].desti_trajecte,
+                    mins,
+                    next: t[1] ? `Siguiente: ${Math.max(1, Math.round(t[1].temps_restant / 60))} min` : null,
+                    itinKey: `metro:${via.codi_linia}:${via.codi_via}`,
+                    itin: { mode: 'metro', lineCode: via.codi_linia, line: t[0].nom_linia, stationId: stop.id }
+                };
+            });
+        }
+
+        async function fetchTramProxy(path) {
+            const target = 'https://opendata.tram.cat/api/v1/' + path;
+            for (const wrap of TRAM_PROXIES) {
+                try {
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 9000);
+                    const res = await fetch(wrap(target), { signal: ctrl.signal });
+                    clearTimeout(timer);
+                    if (res.ok) {
+                        const j = await res.json();
+                        if (Array.isArray(j)) return j;
+                    }
+                } catch (e) { /* prueba el siguiente proxy */ }
+            }
+            throw new Error('El servicio del TRAM no responde ahora mismo. Vuelve a intentarlo.');
+        }
+
+        async function fetchTramArrivals(stop) {
+            const all = await fetchTramProxy('stopTimes');
+            const mine = all.filter(t => t.code == stop.out || t.code == stop.ret);
+            const now = Date.now();
+            // agrupa por línea + destino y se queda con las 2 próximas llegadas
+            const groups = {};
+            mine.forEach(t => {
+                const when = new Date(String(t.arrivalTime).replace(' ', 'T')).getTime();
+                if (isNaN(when) || when < now - 30000) return;
+                const k = `${t.lineName}|${t.destination}`;
+                (groups[k] = groups[k] || []).push(when);
+            });
+            return Object.entries(groups).map(([k, times]) => {
+                times.sort((a, b) => a - b);
+                const [lineName, dest] = k.split('|');
+                const mins = Math.max(0, Math.round((times[0] - now) / 60000));
+                return {
+                    line: 'T' + lineName, color: TRAM_COLOR, dest,
+                    mins,
+                    next: times[1] ? `Siguiente: ${Math.max(1, Math.round((times[1] - now) / 60000))} min` : null,
+                    itinKey: `tram:${lineName}:${dest}`,
+                    itin: { mode: 'tram', lineId: parseInt(lineName, 10), stopName: stop.name }
+                };
+            });
+        }
+
+        // --- 11. ITINERARIOS DESPLEGABLES ---
+        async function toggleItinerary(index, cardElement) {
+            const d = (window._departures || [])[index];
+            if (!d) return;
             const itineraryDiv = cardElement.querySelector('.bus-itinerary');
 
             if (itineraryDiv.style.display === 'block') {
@@ -618,56 +741,38 @@
             document.querySelectorAll('.bus-card').forEach(el => el.classList.remove('open'));
             routeLayer.clearLayers();
 
-            activeRoute = { line, routeId };
+            activeRoute = { key: d.itinKey };
             cardElement.classList.add('open');
             itineraryDiv.style.display = 'block';
             itineraryDiv.innerHTML = '<div style="text-align:center; color:var(--text-soft); padding:10px;"><div class="loader-small"></div> Trazando ruta...</div>';
 
             try {
-                const rid = parseInt(routeId, 10);
-                const lineCode = Math.floor(rid / 10);
-                const sentit = rid % 10;
+                let nodes; // [{ name, lat, lon, hl }] en orden de recorrido
+                if (d.itin.mode === 'bus') nodes = await busItinerary(d.itin);
+                else if (d.itin.mode === 'metro') nodes = await metroItinerary(d.itin);
+                else nodes = await tramItinerary(d.itin);
 
-                const url = `https://api.tmb.cat/v1/transit/linies/bus/${lineCode}/parades?app_id=${APP_ID}&app_key=${APP_KEY}`;
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('Ruta no disponible');
-                const data = await res.json();
+                if (!activeRoute || activeRoute.key !== d.itinKey) return;
 
-                let current = data.features.find(f => f.properties.CODI_PARADA == stopCode && f.properties.SENTIT == sentit)
-                           || data.features.find(f => f.properties.CODI_PARADA == stopCode);
-                if (!current) throw new Error('No se ha podido localizar el recorrido');
-
-                const dir = current.properties.SENTIT;
-                const ordre = current.properties.ORDRE;
-                const stops = data.features
-                    .filter(f => f.properties.SENTIT === dir && f.properties.ORDRE >= ordre)
-                    .sort((a, b) => a.properties.ORDRE - b.properties.ORDRE);
-
-                const color = lineColor(line);
                 let html = '<div>';
                 const latlngs = [];
-
-                stops.forEach((stop, index) => {
-                    const isFirst = index === 0;
-                    const isLast = index === stops.length - 1;
-                    const dotColor = isFirst ? '#da291c' : (isLast ? '#0a8f4e' : color);
-                    const latlng = [stop.geometry.coordinates[1], stop.geometry.coordinates[0]];
-                    latlngs.push(latlng);
-
-                    L.circleMarker(latlng, {
-                        radius: (isFirst || isLast) ? 7 : 4.5,
+                nodes.forEach((n, i) => {
+                    const isFirst = i === 0, isLast = i === nodes.length - 1;
+                    const dotColor = isFirst ? '#da291c' : (isLast ? '#0a8f4e' : d.color);
+                    latlngs.push([n.lat, n.lon]);
+                    L.circleMarker([n.lat, n.lon], {
+                        radius: (isFirst || isLast || n.hl) ? 7 : 4.5,
                         color: dotColor, fillColor: '#fff', fillOpacity: 1, weight: 3
-                    }).bindPopup(`<b>${esc(stop.properties.NOM_PARADA)}</b>`).addTo(routeLayer);
-
+                    }).bindPopup(`<b>${esc(n.name)}</b>`).addTo(routeLayer);
                     html += `
                         <div class="itinerary-node">
                             <div class="node-dot" style="background:${dotColor}"></div>
-                            <div class="node-name ${isFirst || isLast ? 'hl' : ''}">${esc(stop.properties.NOM_PARADA)}</div>
+                            <div class="node-name ${isFirst || isLast || n.hl ? 'hl' : ''}">${esc(n.name)}${n.hl ? ' 📍' : ''}</div>
                         </div>`;
                 });
                 html += '</div>';
 
-                L.polyline(latlngs, { color: color, weight: 5, opacity: .75 }).addTo(routeLayer);
+                L.polyline(latlngs, { color: d.color, weight: 5, opacity: .75 }).addTo(routeLayer);
                 map.fitBounds(routeLayer.getBounds(), { padding: [25, 25] });
 
                 itineraryDiv.innerHTML = html;
@@ -678,18 +783,82 @@
             }
         }
 
-        // --- 11. BÚSQUEDA MANUAL ---
+        // El routeId del iBus incluye línea y sentido: "2151" = línea 215, sentido 1
+        async function busItinerary({ routeId, stopCode }) {
+            const rid = parseInt(routeId, 10);
+            const lineCode = Math.floor(rid / 10);
+            const sentit = rid % 10;
+
+            const res = await fetch(`https://api.tmb.cat/v1/transit/linies/bus/${lineCode}/parades?${TMB_AUTH}`);
+            if (!res.ok) throw new Error('Ruta no disponible');
+            const data = await res.json();
+
+            const current = data.features.find(f => f.properties.CODI_PARADA == stopCode && f.properties.SENTIT == sentit)
+                         || data.features.find(f => f.properties.CODI_PARADA == stopCode);
+            if (!current) throw new Error('No se ha podido localizar el recorrido');
+
+            return data.features
+                .filter(f => f.properties.SENTIT === current.properties.SENTIT && f.properties.ORDRE >= current.properties.ORDRE)
+                .sort((a, b) => a.properties.ORDRE - b.properties.ORDRE)
+                .map(f => ({ name: f.properties.NOM_PARADA, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], hl: false }));
+        }
+
+        async function metroItinerary({ lineCode, stationId }) {
+            const res = await fetch(`https://api.tmb.cat/v1/transit/linies/metro/${lineCode}/estacions?${TMB_AUTH}`);
+            if (!res.ok) throw new Error('Línea no disponible');
+            const data = await res.json();
+            if (!data.features || data.features.length === 0) throw new Error('Línea no disponible');
+            return data.features
+                .sort((a, b) => a.properties.ORDRE_ESTACIO - b.properties.ORDRE_ESTACIO)
+                .map(f => ({
+                    name: f.properties.NOM_ESTACIO,
+                    lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
+                    hl: f.properties.CODI_ESTACIO == stationId
+                }));
+        }
+
+        async function tramItinerary({ lineId, stopName }) {
+            const stops = TRAM_LINES[String(lineId)];
+            if (!stops) throw new Error('Línea no disponible');
+            return stops.map(([name, lat, lon]) => ({ name, lat, lon, hl: name === stopName }));
+        }
+
+        // --- 12. BÚSQUEDA MANUAL (paradas de bus) ---
         function searchManual() {
             const code = document.getElementById('stopCode').value.trim();
             if (!code) {
-                showError("Escribe el código de la parada (está en el poste o marquesina).");
+                showError("Escribe el código de la parada de bus (está en el poste o marquesina).");
                 return;
             }
             document.getElementById('stopCode').blur();
-            fetchBuses(code);
+            fetchArrivals({ type: 'bus', code, name: `Parada ${code}` });
         }
 
-        // --- 12. BÚSQUEDA POR GPS (Overpass OSM) ---
+        // --- 13. ESTACIONES DE METRO (TMB, con caché de 7 días) ---
+        async function getMetroStations() {
+            const CACHE_KEY = 'busbcn_metro_v1';
+            let cached = null;
+            try { cached = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch {}
+            if (cached && Date.now() - cached.t < 7 * 864e5) return cached.s;
+            try {
+                const res = await fetch(`https://api.tmb.cat/v1/transit/estacions?${TMB_AUTH}`);
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                const s = data.features.map(f => ({
+                    id: f.properties.ID_ESTACIO,
+                    name: f.properties.NOM_ESTACIO,
+                    lines: (String(f.properties.PICTO || '').match(/L\d+[NS]?|FM/g) || []).join(' · '),
+                    lat: f.geometry.coordinates[1],
+                    lon: f.geometry.coordinates[0]
+                }));
+                localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), s }));
+                return s;
+            } catch {
+                return cached ? cached.s : []; // sin red: usa caché aunque caduque
+            }
+        }
+
+        // --- 14. BÚSQUEDA POR GPS ---
         async function fetchOverpass(query) {
             for (const url of OVERPASS_ENDPOINTS) {
                 try {
@@ -704,15 +873,27 @@
                     console.warn("Fallo de conexión con servidor:", url);
                 }
             }
-            throw new Error("El servicio de mapas está saturado. Inténtalo en unos minutos o busca por nº de parada.");
+            throw new Error("overpass");
         }
 
-        async function findNearbyStops(lat, lon) {
+        async function findBusStops(lat, lon) {
             // Empieza con 400 m y amplía si no hay nada
             for (const radius of [400, 900]) {
                 const query = `[out:json][timeout:10];node["highway"="bus_stop"](around:${radius},${lat},${lon});out body;`;
                 const osmData = await fetchOverpass(query);
-                if (osmData.elements && osmData.elements.length > 0) return osmData.elements;
+                if (osmData.elements && osmData.elements.length > 0) {
+                    return osmData.elements.map(e => {
+                        const codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
+                        const cleanCode = codeStr.replace(/\D/g, '');
+                        return {
+                            type: 'bus',
+                            code: (cleanCode.length > 0 && cleanCode.length <= 4) ? cleanCode : null,
+                            name: e.tags.name || `Parada ${cleanCode}`,
+                            lat: e.lat, lon: e.lon,
+                            dist: getDistance(lat, lon, e.lat, e.lon)
+                        };
+                    }).filter(e => e.code !== null);
+                }
             }
             return [];
         }
@@ -734,79 +915,78 @@
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
-                setLoading("🗺️ Buscando paradas cercanas...");
+                setLoading("🗺️ Buscando bus, metro y tram cerca...");
 
                 map.setView([lat, lon], 16);
                 userMarkerLayer.clearLayers();
                 L.marker([lat, lon], { icon: userIcon, zIndexOffset: 500 }).addTo(userMarkerLayer).bindPopup("<b>Estás aquí</b>");
 
-                try {
-                    const elements = await findNearbyStops(lat, lon);
-                    if (elements.length === 0) {
-                        showError("No hay paradas de bus a menos de 900 m de tu posición.", "searchGPS");
-                        return;
-                    }
+                // Las tres redes en paralelo; si una falla, las otras siguen
+                const [busRes, metroRes] = await Promise.allSettled([
+                    findBusStops(lat, lon),
+                    getMetroStations()
+                ]);
 
-                    nearbyStops = elements.map(e => {
-                        const codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
-                        const cleanCode = codeStr.replace(/\D/g, '');
-                        return {
-                            ref: (cleanCode.length > 0 && cleanCode.length <= 4) ? cleanCode : null,
-                            name: e.tags.name || `Parada ${cleanCode}`,
-                            lat: e.lat, lon: e.lon,
-                            dist: getDistance(lat, lon, e.lat, e.lon)
-                        };
-                    }).filter(e => e.ref !== null).sort((a, b) => a.dist - b.dist).slice(0, 12);
+                const busStops = busRes.status === 'fulfilled' ? busRes.value : [];
+                const metroStops = (metroRes.status === 'fulfilled' ? metroRes.value : [])
+                    .map(s => ({ type: 'metro', id: s.id, name: s.name, lines: s.lines, lat: s.lat, lon: s.lon, dist: getDistance(lat, lon, s.lat, s.lon) }))
+                    .filter(s => s.dist <= 800);
+                const tramStops = TRAM_STOPS
+                    .map(([name, slat, slon, out, ret]) => ({ type: 'tram', name, out, ret, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }))
+                    .filter(s => s.dist <= 800);
 
-                    if (nearbyStops.length === 0) {
-                        showError("Hay paradas cerca, pero no tienen código registrado en el mapa. Busca por nº de parada.");
-                        return;
-                    }
+                nearbyStops = [...busStops, ...metroStops, ...tramStops]
+                    .sort((a, b) => a.dist - b.dist)
+                    .slice(0, 15);
 
-                    markersLayer.clearLayers();
-                    stopMarkers = {};
-                    nearbyStops.forEach(stop => {
-                        const marker = L.marker([stop.lat, stop.lon], { icon: stopPinIcon(false) }).addTo(markersLayer);
-                        marker.bindPopup(`<b>${esc(stop.name)}</b><br><small>a ${fmtDist(stop.dist)}</small>`);
-                        marker.on('click', () => {
-                            map.setView([stop.lat, stop.lon], 17);
-                            fetchBuses(stop.ref, stop.name);
-                        });
-                        stopMarkers[stop.ref] = marker;
-                    });
-                    renderNearbyChips();
-
-                    setLoading("⏱️ Conectando con los buses...");
-
-                    // Elige la parada más cercana que tenga servicio ahora mismo
-                    let found = false;
-                    for (let i = 0; i < Math.min(nearbyStops.length, 3); i++) {
-                        const stop = nearbyStops[i];
-                        try {
-                            const tmbRes = await fetch(`https://api.tmb.cat/v1/ibus/stops/${stop.ref}?app_id=${APP_ID}&app_key=${APP_KEY}`);
-                            if (tmbRes.ok) {
-                                const data = await tmbRes.json();
-                                if (data.data && data.data.ibus && data.data.ibus.length > 0) {
-                                    currentStop = { code: stop.ref, name: stop.name };
-                                    document.getElementById('stopCode').value = stop.ref;
-                                    renderStopCard(stop.ref, stop.name);
-                                    renderBuses(data.data.ibus, stop.ref, false);
-                                    renderFavs();
-                                    renderNearbyChips();
-                                    highlightMarkers();
-                                    startCountdown();
-                                    found = true;
-                                    break;
-                                }
-                            }
-                        } catch (e) { /* prueba la siguiente */ }
-                    }
-
-                    if (!found) fetchBuses(nearbyStops[0].ref, nearbyStops[0].name);
-
-                } catch (err) {
-                    showError(err.message, "searchGPS");
+                if (nearbyStops.length === 0) {
+                    const reason = busRes.status === 'rejected'
+                        ? "El buscador de paradas está saturado. Inténtalo en unos minutos o busca por nº de parada."
+                        : "No hay paradas de bus, metro ni tram a menos de 900 m de tu posición.";
+                    showError(reason, "searchGPS");
+                    return;
                 }
+
+                markersLayer.clearLayers();
+                stopMarkers = {};
+                nearbyStops.forEach(stop => {
+                    const marker = L.marker([stop.lat, stop.lon], { icon: stopPinIcon(stop.type, false) }).addTo(markersLayer);
+                    marker.bindPopup(`<b>${esc(stop.name)}</b><br><small>${MODE_NAME[stop.type]} · a ${fmtDist(stop.dist)}</small>`);
+                    marker.on('click', () => {
+                        map.setView([stop.lat, stop.lon], 17);
+                        fetchArrivals(stop);
+                    });
+                    stopMarkers[stopKey(stop)] = marker;
+                });
+                renderNearbyChips();
+
+                setLoading("⏱️ Conectando en tiempo real...");
+
+                // Elige la parada más cercana con servicio ahora mismo
+                let found = false;
+                for (let i = 0; i < Math.min(nearbyStops.length, 3); i++) {
+                    const stop = nearbyStops[i];
+                    if (stop.type === 'tram') { fetchArrivals(stop); found = true; break; }
+                    try {
+                        const url = stop.type === 'bus'
+                            ? `https://api.tmb.cat/v1/ibus/stops/${stop.code}?${TMB_AUTH}`
+                            : `https://api.tmb.cat/v1/imetro/estacions/${stop.id}?${TMB_AUTH}`;
+                        const res = await fetch(url);
+                        if (!res.ok) continue;
+                        const data = await res.json();
+                        const hasService = stop.type === 'bus'
+                            ? (data.data && data.data.ibus && data.data.ibus.length > 0)
+                            : (Array.isArray(data) && data.length > 0);
+                        if (hasService) {
+                            fetchArrivals(stop);
+                            found = true;
+                            break;
+                        }
+                    } catch (e) { /* prueba la siguiente */ }
+                }
+
+                if (!found) fetchArrivals(nearbyStops[0]);
+
             }, () => {
                 showError("No has dado permiso de ubicación o el GPS está desactivado. También puedes buscar por nº de parada.");
             }, { timeout: 10000, maximumAge: 30000 });
