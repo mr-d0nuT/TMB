@@ -2,74 +2,239 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bus BCN Pro</title>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#da291c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Consulta en tiempo real los próximos buses TMB de la parada más cercana a tu ubicación en Barcelona.">
+    <title>Bus BCN</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚍</text></svg>">
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
-        :root { --primary: #e30613; --bg: #f0f2f5; --card: #ffffff; --text: #333; --blue: #2196F3; }
-        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background: var(--bg); margin: 0; padding: 15px; color: var(--text); overflow-x: hidden; }
-        
-        /* PANTALLA DE CARGA BLINDADA */
-        #splash-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--bg); display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 9999;
-            transition: opacity 0.5s ease-out;
+        :root {
+            --primary: #da291c;
+            --primary-dark: #b01e13;
+            --bg: #f2f4f8;
+            --card: #ffffff;
+            --text: #1a1d21;
+            --text-soft: #5f6670;
+            --text-faint: #9aa1ab;
+            --border: #e4e7ec;
+            --chip-bg: #ffffff;
+            --green: #0a8f4e;
+            --amber: #c77700;
+            --blue: #1a73e8;
+            --shadow: 0 1px 3px rgba(16,24,40,.08), 0 4px 12px rgba(16,24,40,.06);
+            --shadow-lg: 0 8px 24px rgba(16,24,40,.14);
+            --radius: 16px;
         }
-        .img-donut { width: 160px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin-bottom: 40px; animation: pulse 2s infinite; }
-        .img-app { width: 90px; border-radius: 18px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #101418;
+                --card: #1b2026;
+                --text: #eef1f4;
+                --text-soft: #aab2bc;
+                --text-faint: #6f7884;
+                --border: #2a3138;
+                --chip-bg: #232931;
+                --green: #34c373;
+                --amber: #f0a437;
+                --shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
+                --shadow-lg: 0 8px 24px rgba(0,0,0,.5);
+            }
+        }
 
-        /* CABECERA Y MAPA */
-        .header { text-align: center; margin-bottom: 15px; margin-top: 5px; }
-        .header h1 { margin: 0; color: var(--primary); font-size: 1.8rem; letter-spacing: -0.5px; }
-        
-        #map { height: 280px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1; border: 2px solid #ddd; }
-        
-        .custom-bus-icon { font-size: 24px; text-shadow: 0 2px 4px rgba(0,0,0,0.4); text-align: center; line-height: 24px; }
-        .user-dot { background-color: var(--blue); border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(33,150,243,0.8); }
+        * { box-sizing: border-box; }
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            background: var(--bg); color: var(--text); margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            overflow-x: hidden;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
 
-        /* CONTROLES */
-        .controls { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
-        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; text-align: center; font-weight: bold; }
-        button { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:active { transform: scale(0.95); }
-        .btn-gps { background: #333; width: 100%; font-size: 1rem; }
-        
-        /* ESTADOS */
-        .error-msg { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px; font-size: 0.9rem; display: none; margin-bottom: 15px; text-align: center; border: 1px solid #fca5a5; }
-        .loading { text-align: center; color: #666; padding: 20px; font-weight: bold; display: none; }
-        .stop-title { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; color: #444; }
-        .refresh-indicator { text-align: center; font-size: 0.85rem; color: #888; margin-bottom: 15px; height: 20px; font-style: italic; }
-        
-        /* TARJETAS DE BUS (ACORDEÓN) */
-        .bus-list { display: flex; flex-direction: column; gap: 12px; padding-bottom: 40px; }
-        .bus-card { background: var(--card); border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 5px solid var(--primary); overflow: hidden; }
-        .bus-card-content { padding: 15px; display: flex; align-items: center; gap: 15px; cursor: pointer; transition: background 0.2s; }
-        .bus-card-content:active { background: #f9f9f9; }
-        .bus-line { background: var(--primary); color: white; padding: 8px 12px; border-radius: 6px; font-size: 1.2rem; font-weight: 900; min-width: 55px; text-align: center; }
-        .bus-info { flex: 1; }
-        .bus-dest { font-size: 0.85rem; color: #666; font-weight: 600; text-transform: uppercase; }
-        .bus-time { font-size: 1.6rem; font-weight: 900; color: #059669; }
-        .bus-time span { font-size: 0.8rem; font-weight: 500; color: #666; margin-left: 2px; }
-        .blink { animation: flash 1s ease-out; }
-        @keyframes flash { 0% { opacity: 0.5; } 100% { opacity: 1; } }
+        /* ---------- SPLASH ---------- */
+        #splash-screen {
+            position: fixed; inset: 0; background: var(--bg);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 9999; transition: opacity .45s ease-out; gap: 34px;
+        }
+        .img-donut { width: 150px; border-radius: 26px; box-shadow: var(--shadow-lg); animation: pulse 1.8s infinite; }
+        .img-app { width: 80px; border-radius: 18px; box-shadow: var(--shadow); }
+        @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 
-        /* DESPLEGABLE ITINERARIO */
-        .bus-itinerary { display: none; background: #fafafa; border-top: 1px solid #eee; padding: 15px; max-height: 250px; overflow-y: auto; }
-        .itinerary-node { display: flex; align-items: center; gap: 15px; position: relative; padding: 8px 0; }
-        .itinerary-node::before { content: ''; position: absolute; left: 7px; top: 0; bottom: 0; width: 2px; background: #ccc; z-index: 1; }
+        /* ---------- HEADER ---------- */
+        .topbar {
+            position: sticky; top: 0; z-index: 1100;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+            background: color-mix(in srgb, var(--bg) 82%, transparent);
+            -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--border);
+        }
+        .topbar h1 { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -.3px; display: flex; align-items: center; gap: 8px; }
+        .topbar h1 .dot { color: var(--primary); }
+        .live-badge {
+            font-size: .7rem; font-weight: 700; color: var(--green);
+            display: flex; align-items: center; gap: 5px; text-transform: uppercase; letter-spacing: .5px;
+        }
+        .live-badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 1.6s infinite; }
+
+        main { padding: 14px 14px 50px; max-width: 640px; margin: 0 auto; }
+
+        /* ---------- MAPA ---------- */
+        .map-wrap { position: relative; margin-bottom: 14px; }
+        #map {
+            height: 300px; border-radius: var(--radius); box-shadow: var(--shadow);
+            z-index: 1; border: 1px solid var(--border); background: var(--bg);
+        }
+        .map-fab {
+            position: absolute; right: 12px; bottom: 12px; z-index: 1000;
+            width: 48px; height: 48px; border-radius: 50%;
+            background: var(--card); color: var(--blue); border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg); font-size: 22px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform .15s;
+        }
+        .map-fab:active { transform: scale(.9); }
+        .leaflet-container { font-family: inherit; }
+        .leaflet-popup-content-wrapper { border-radius: 12px; background: var(--card); color: var(--text); box-shadow: var(--shadow-lg); }
+        .leaflet-popup-tip { background: var(--card); }
+        .leaflet-bar a { background: var(--card) !important; color: var(--text) !important; border-color: var(--border) !important; }
+
+        .stop-pin { position: relative; }
+        .stop-pin svg { filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); transition: transform .15s; transform-origin: bottom center; }
+        .stop-pin.selected svg { transform: scale(1.25); }
+        .user-dot-wrap { position: relative; }
+        .user-dot-core {
+            width: 16px; height: 16px; border-radius: 50%; background: var(--blue);
+            border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); position: relative; z-index: 2;
+        }
+        .user-dot-halo {
+            position: absolute; top: 50%; left: 50%; width: 16px; height: 16px;
+            border-radius: 50%; background: var(--blue); opacity: .35;
+            transform: translate(-50%,-50%); animation: halo 2s ease-out infinite; z-index: 1;
+        }
+        @keyframes halo { 0% { transform: translate(-50%,-50%) scale(1); opacity: .4; } 100% { transform: translate(-50%,-50%) scale(3.2); opacity: 0; } }
+
+        /* ---------- BUSCADOR ---------- */
+        .controls { display: flex; gap: 8px; margin-bottom: 14px; }
+        input[type=number] {
+            flex: 1; min-width: 0; padding: 13px 14px; border: 1px solid var(--border); border-radius: 12px;
+            font-size: 1rem; font-weight: 700; text-align: center; background: var(--card); color: var(--text);
+            -moz-appearance: textfield; appearance: textfield; outline: none; transition: border-color .15s;
+        }
+        input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+        input[type=number]:focus { border-color: var(--primary); }
+        input::placeholder { color: var(--text-faint); font-weight: 500; }
+        button { font-family: inherit; }
+        .btn {
+            border: none; border-radius: 12px; padding: 13px 16px; font-size: .95rem; font-weight: 700;
+            cursor: pointer; transition: transform .12s, filter .15s; white-space: nowrap;
+        }
+        .btn:active { transform: scale(.95); }
+        .btn-search { background: var(--primary); color: #fff; }
+        .btn-gps { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+
+        /* ---------- CHIPS DE PARADAS ---------- */
+        .chips-label { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--text-faint); margin: 2px 4px 7px; }
+        .chips-row { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+        .chips-row::-webkit-scrollbar { display: none; }
+        .chip {
+            flex-shrink: 0; display: flex; align-items: center; gap: 7px;
+            background: var(--chip-bg); border: 1px solid var(--border); border-radius: 999px;
+            padding: 9px 14px; font-size: .85rem; font-weight: 600; color: var(--text);
+            cursor: pointer; box-shadow: var(--shadow); transition: transform .12s; max-width: 250px;
+        }
+        .chip:active { transform: scale(.96); }
+        .chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .chip.active .chip-dist, .chip.active .chip-star { color: rgba(255,255,255,.85); }
+        .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .chip-dist { font-size: .75rem; color: var(--text-faint); font-weight: 700; }
+        .chip-star { color: var(--amber); }
+
+        /* ---------- PARADA ACTUAL ---------- */
+        .stop-card {
+            background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: var(--shadow); padding: 14px 16px 12px; margin-bottom: 12px; display: none;
+        }
+        .stop-card-top { display: flex; align-items: flex-start; gap: 10px; }
+        .stop-card-info { flex: 1; min-width: 0; }
+        .stop-name { font-size: 1.05rem; font-weight: 800; line-height: 1.25; }
+        .stop-code { font-size: .8rem; color: var(--text-faint); font-weight: 600; margin-top: 2px; }
+        .fav-btn {
+            background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 2px 4px;
+            color: var(--text-faint); line-height: 1; transition: transform .15s;
+        }
+        .fav-btn:active { transform: scale(1.25); }
+        .fav-btn.faved { color: var(--amber); }
+        .refresh-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+        .progress-track { flex: 1; height: 4px; border-radius: 4px; background: var(--border); overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; border-radius: 4px; background: var(--green); transition: width 1s linear; }
+        .refresh-text { font-size: .75rem; color: var(--text-faint); font-weight: 600; white-space: nowrap; }
+        .refresh-now { background: none; border: none; font-size: 1.05rem; cursor: pointer; padding: 0 2px; color: var(--text-soft); }
+
+        /* ---------- ESTADOS ---------- */
+        .error-msg {
+            background: color-mix(in srgb, var(--primary) 10%, var(--card)); color: var(--primary);
+            border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+            padding: 14px; border-radius: var(--radius); font-size: .92rem; font-weight: 600;
+            display: none; margin-bottom: 14px; text-align: center;
+        }
+        .error-msg button { margin-top: 10px; display: inline-block; background: var(--primary); color: #fff; }
+        .status-msg { text-align: center; color: var(--text-soft); padding: 14px 0 6px; font-weight: 600; font-size: .92rem; display: none; }
+
+        /* skeleton */
+        .skeleton-card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); padding: 16px; display: flex; gap: 14px; align-items: center; }
+        .sk { background: linear-gradient(90deg, var(--border) 25%, color-mix(in srgb, var(--border) 40%, var(--card)) 50%, var(--border) 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; border-radius: 8px; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        /* ---------- TARJETAS DE BUS ---------- */
+        .bus-list { display: flex; flex-direction: column; gap: 10px; }
+        .bus-card {
+            background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+            box-shadow: var(--shadow); overflow: hidden; animation: slideUp .3s ease both;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        .bus-card-content { padding: 13px 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .bus-card-content:active { background: color-mix(in srgb, var(--text) 4%, var(--card)); }
+        .bus-line {
+            color: #fff; padding: 8px 10px; border-radius: 9px; font-size: 1.15rem; font-weight: 900;
+            min-width: 56px; text-align: center; letter-spacing: -.5px; box-shadow: inset 0 -2px 0 rgba(0,0,0,.18);
+        }
+        .bus-info { flex: 1; min-width: 0; }
+        .bus-dest { font-size: .82rem; color: var(--text-soft); font-weight: 700; text-transform: uppercase; letter-spacing: .2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bus-dest-label { font-size: .68rem; color: var(--text-faint); font-weight: 600; }
+        .bus-eta { text-align: right; }
+        .bus-time { font-size: 1.55rem; font-weight: 900; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1; }
+        .bus-time small { font-size: .75rem; font-weight: 600; color: var(--text-faint); margin-left: 3px; }
+        .bus-time.soon { color: var(--green); }
+        .bus-time.now { color: var(--primary); animation: blinkSoft 1.1s infinite; font-size: 1.15rem; text-transform: uppercase; }
+        @keyframes blinkSoft { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+        .bus-chevron { color: var(--text-faint); font-size: .8rem; transition: transform .25s; }
+        .bus-card.open .bus-chevron { transform: rotate(180deg); }
+        .blink { animation: flash .8s ease-out; }
+        @keyframes flash { 0% { opacity: .4; } 100% { opacity: 1; } }
+
+        /* ---------- ITINERARIO ---------- */
+        .bus-itinerary { display: none; background: color-mix(in srgb, var(--text) 3%, var(--card)); border-top: 1px solid var(--border); padding: 14px 18px; max-height: 260px; overflow-y: auto; }
+        .itinerary-node { display: flex; align-items: center; gap: 14px; position: relative; padding: 7px 0; }
+        .itinerary-node::before { content: ''; position: absolute; left: 7px; top: 0; bottom: 0; width: 3px; background: var(--border); z-index: 1; border-radius: 2px; }
         .itinerary-node:first-child::before { top: 50%; }
         .itinerary-node:last-child::before { bottom: 50%; }
-        .node-dot { width: 16px; height: 16px; border-radius: 50%; z-index: 2; position: relative; border: 3px solid white; box-shadow: 0 0 3px rgba(0,0,0,0.2); }
-        .node-name { font-size: 0.85rem; color: #444; }
-        .loader-small { border: 3px solid #f3f3f3; border-top: 3px solid var(--primary); border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 5px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .node-dot { width: 17px; height: 17px; border-radius: 50%; z-index: 2; flex-shrink: 0; border: 3.5px solid var(--card); box-shadow: 0 0 0 1px var(--border); }
+        .node-name { font-size: .86rem; color: var(--text-soft); }
+        .node-name.hl { font-weight: 800; color: var(--text); }
+        .loader-small { border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; width: 16px; height: 16px; animation: spin .9s linear infinite; display: inline-block; vertical-align: middle; margin-right: 6px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .empty-state { text-align: center; padding: 28px 16px; color: var(--text-faint); font-weight: 600; }
+        .empty-state .big { font-size: 2.2rem; margin-bottom: 8px; }
+
+        footer { text-align: center; font-size: .72rem; color: var(--text-faint); padding: 26px 0 10px; }
     </style>
 </head>
 <body>
@@ -79,49 +244,70 @@
         <img src="https://cdn-icons-png.flaticon.com/512/3448/3448339.png" alt="Bus App Logo" class="img-app">
     </div>
 
-    <div class="header"><h1>🚍 Bus BCN Pro</h1></div>
-    <div id="map"></div>
+    <header class="topbar">
+        <h1>🚍 Bus BCN <span class="dot">•</span></h1>
+        <div class="live-badge">En directo</div>
+    </header>
 
-    <div class="controls">
-        <div class="input-group">
-            <input type="number" id="stopCode" placeholder="Nº parada manual">
-            <button onclick="searchManual()">Buscar</button>
+    <main>
+        <div class="map-wrap">
+            <div id="map"></div>
+            <button class="map-fab" onclick="searchGPS()" title="Buscar paradas cerca de mí" aria-label="Buscar paradas cerca de mí">📍</button>
         </div>
-        <button class="btn-gps" onclick="searchGPS()">📍 Centrar Mapa y Actualizar</button>
-    </div>
 
-    <div id="errorBox" class="error-msg"></div>
-    <div id="loading" class="loading"></div>
-    
-    <div id="stopTitle" class="stop-title"></div>
-    <div id="refreshTimer" class="refresh-indicator"></div>
-    <div id="results" class="bus-list"></div>
+        <div class="controls">
+            <input type="number" id="stopCode" placeholder="Nº de parada" inputmode="numeric" onkeydown="if(event.key==='Enter')searchManual()">
+            <button class="btn btn-search" onclick="searchManual()">Buscar</button>
+            <button class="btn btn-gps" onclick="searchGPS()">📍 Cerca de mí</button>
+        </div>
+
+        <div id="favSection" style="display:none">
+            <div class="chips-label">⭐ Favoritas</div>
+            <div id="favChips" class="chips-row"></div>
+        </div>
+
+        <div id="nearbySection" style="display:none">
+            <div class="chips-label">Paradas cercanas</div>
+            <div id="nearbyChips" class="chips-row"></div>
+        </div>
+
+        <div id="errorBox" class="error-msg" role="alert"></div>
+        <div id="loading" class="status-msg" aria-live="polite"></div>
+
+        <div id="stopCard" class="stop-card">
+            <div class="stop-card-top">
+                <div class="stop-card-info">
+                    <div class="stop-name" id="stopName"></div>
+                    <div class="stop-code" id="stopCodeLabel"></div>
+                </div>
+                <button class="fav-btn" id="favBtn" onclick="toggleFav()" title="Guardar en favoritas" aria-label="Guardar en favoritas">★</button>
+            </div>
+            <div class="refresh-row">
+                <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+                <span class="refresh-text" id="refreshText"></span>
+                <button class="refresh-now" onclick="refreshNow()" title="Actualizar ahora" aria-label="Actualizar ahora">🔄</button>
+            </div>
+        </div>
+
+        <div id="results" class="bus-list"></div>
+
+        <footer>Datos en tiempo real de TMB · Mapa © OpenStreetMap © CARTO</footer>
+    </main>
 
     <script>
-        // --- 1. PROTECCIÓN DE PANTALLA DE CARGA (INDEPENDIENTE) ---
-        // Esto se ejecutará sí o sí, incluso si todo lo demás falla
+        // --- 1. SPLASH (se cierra sí o sí, aunque falle el resto) ---
         setTimeout(() => {
             const splash = document.getElementById('splash-screen');
-            if(splash) {
+            if (splash) {
                 splash.style.opacity = '0';
                 setTimeout(() => splash.style.display = 'none', 500);
             }
-        }, 2500);
+        }, 1600);
 
-        // --- 2. VARIABLES GLOBALES ---
+        // --- 2. CONSTANTES Y ESTADO ---
         const APP_ID = 'f87364db';
         const APP_KEY = 'fb9898a5d8988e645bba1a6eaa956b65';
-        
-        let countdownInterval;
-        let secondsLeft = 20;
-        
-        let map;
-        let markersLayer;
-        let userMarkerLayer;
-        let routeLayer;
-
-        let activeRouteLine = null;
-        let activeRouteHTML = "";
+        const REFRESH_SECONDS = 20;
 
         const OVERPASS_ENDPOINTS = [
             "https://overpass-api.de/api/interpreter",
@@ -129,332 +315,501 @@
             "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
         ];
 
-        // --- 3. INICIALIZACIÓN PRINCIPAL ---
-        window.onload = () => {
-            try {
-                initMap();
-                searchGPS();
-            } catch (error) {
-                console.error("Error crítico al iniciar:", error);
-                showError("Error al cargar los mapas. Intenta refrescar la página.");
-            }
-        };
+        let map, markersLayer, userMarkerLayer, routeLayer, tileLayer;
+        let countdownInterval = null;
+        let secondsLeft = REFRESH_SECONDS;
+        let currentStop = null;          // { code, name }
+        let nearbyStops = [];            // [{ ref, name, lat, lon, dist }]
+        let stopMarkers = {};            // ref -> L.marker
+        let activeRoute = null;          // { line, routeId }
+        let activeRouteHTML = "";
+        let fetchSeq = 0;                // descarta respuestas obsoletas
+
+        // Colores oficiales por familia de línea TMB
+        function lineColor(line) {
+            const l = String(line).toUpperCase();
+            if (l.startsWith('H')) return '#003888';
+            if (l.startsWith('V')) return '#6ab023';
+            if (l.startsWith('D')) return '#93107e';
+            if (l.startsWith('X')) return '#1a1a1a';
+            if (l.startsWith('M')) return '#da291c';
+            return '#da291c';
+        }
+
+        // --- 3. MAPA (CARTO Voyager: gratis, sin API key, estética tipo Google Maps) ---
+        const darkScheme = window.matchMedia('(prefers-color-scheme: dark)');
+
+        function tileURL() {
+            return darkScheme.matches
+                ? 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_matter/{z}/{x}/{y}{r}.png'
+                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+        }
 
         function initMap() {
-            map = L.map('map').setView([41.3879, 2.1699], 14);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap',
-                maxZoom: 19
+            map = L.map('map', { zoomControl: true }).setView([41.3879, 2.1699], 14);
+            tileLayer = L.tileLayer(tileURL(), {
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
             }).addTo(map);
             markersLayer = L.layerGroup().addTo(map);
             userMarkerLayer = L.layerGroup().addTo(map);
             routeLayer = L.featureGroup().addTo(map);
+            darkScheme.addEventListener('change', () => tileLayer.setUrl(tileURL()));
         }
 
-        const busIcon = L.divIcon({ html: '🚏', className: 'custom-bus-icon', iconSize: [30, 30], iconAnchor: [15, 30] });
-        const userIcon = L.divIcon({ html: '', className: 'user-dot', iconSize: [16, 16], iconAnchor: [8, 8] });
+        function stopPinIcon(selected) {
+            const color = selected ? '#da291c' : '#e8554a';
+            return L.divIcon({
+                className: '',
+                html: `<div class="stop-pin ${selected ? 'selected' : ''}">
+                        <svg width="34" height="42" viewBox="0 0 34 42">
+                          <path d="M17 1C8.7 1 2 7.7 2 16c0 10.5 15 25 15 25s15-14.5 15-25C32 7.7 25.3 1 17 1z" fill="${color}" stroke="#fff" stroke-width="2"/>
+                          <text x="17" y="22" font-size="14" text-anchor="middle">🚌</text>
+                        </svg>
+                       </div>`,
+                iconSize: [34, 42], iconAnchor: [17, 41], popupAnchor: [0, -38]
+            });
+        }
+        const userIcon = L.divIcon({
+            className: '',
+            html: '<div class="user-dot-wrap"><div class="user-dot-halo"></div><div class="user-dot-core"></div></div>',
+            iconSize: [16, 16], iconAnchor: [8, 8]
+        });
 
-        // --- 4. FUNCIONES DE APOYO ---
-        function showError(msg) {
-            const errBox = document.getElementById('errorBox');
-            if(errBox) {
-                errBox.innerText = msg;
-                errBox.style.display = 'block';
+        // --- 4. INICIO ---
+        window.onload = () => {
+            try {
+                initMap();
+                renderFavs();
+                searchGPS();
+            } catch (error) {
+                console.error("Error crítico al iniciar:", error);
+                showError("Error al cargar el mapa. Intenta refrescar la página.");
             }
-            document.getElementById('loading').style.display = 'none';
-            clearInterval(countdownInterval);
-            document.getElementById('refreshTimer').innerText = '';
-        }
+        };
 
-        function hideMessages() {
-            document.getElementById('errorBox').style.display = 'none';
-            document.getElementById('loading').style.display = 'none';
+        // --- 5. UTILIDADES UI ---
+        function showError(msg, retryFn) {
+            const errBox = document.getElementById('errorBox');
+            errBox.innerHTML = msg + (retryFn ? `<br><button class="btn" onclick="${retryFn}()">Reintentar</button>` : '');
+            errBox.style.display = 'block';
+            setLoading(null);
+            stopCountdown();
+        }
+        function hideError() { document.getElementById('errorBox').style.display = 'none'; }
+        function setLoading(msg) {
+            const el = document.getElementById('loading');
+            el.style.display = msg ? 'block' : 'none';
+            el.innerText = msg || '';
+        }
+        function showSkeleton(n = 3) {
+            document.getElementById('results').innerHTML = Array.from({length: n}, () => `
+                <div class="skeleton-card">
+                    <div class="sk" style="width:56px;height:40px"></div>
+                    <div style="flex:1"><div class="sk" style="height:12px;width:65%;margin-bottom:8px"></div><div class="sk" style="height:10px;width:40%"></div></div>
+                    <div class="sk" style="width:52px;height:28px"></div>
+                </div>`).join('');
         }
 
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
-            const p1 = lat1 * Math.PI/180;
-            const p2 = lat2 * Math.PI/180;
-            const dp = (lat2-lat1) * Math.PI/180;
-            const dl = (lon2-lon1) * Math.PI/180;
-            const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+            const p1 = lat1 * Math.PI/180, p2 = lat2 * Math.PI/180;
+            const dp = (lat2-lat1) * Math.PI/180, dl = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(dp/2)**2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2)**2;
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
+        const fmtDist = m => m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`;
+        const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
-        function startAutoRefresh(stopCode, stopName) {
-            clearInterval(countdownInterval);
-            secondsLeft = 20;
-            document.getElementById('refreshTimer').innerText = `🔄 Actualizando en ${secondsLeft}s`;
-
+        // --- 6. AUTO-REFRESCO ---
+        function startCountdown() {
+            stopCountdown();
+            secondsLeft = REFRESH_SECONDS;
+            updateProgress();
             countdownInterval = setInterval(() => {
                 secondsLeft--;
                 if (secondsLeft <= 0) {
-                    secondsLeft = 20;
-                    fetchBuses(stopCode, stopName, true);
+                    secondsLeft = REFRESH_SECONDS;
+                    if (currentStop) fetchBuses(currentStop.code, currentStop.name, true);
                 }
-                document.getElementById('refreshTimer').innerText = `🔄 Actualizando en ${secondsLeft}s`;
+                updateProgress();
             }, 1000);
         }
+        function stopCountdown() {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            document.getElementById('refreshText').innerText = '';
+            document.getElementById('progressFill').style.width = '0%';
+        }
+        function updateProgress() {
+            const pct = ((REFRESH_SECONDS - secondsLeft) / REFRESH_SECONDS) * 100;
+            document.getElementById('progressFill').style.width = pct + '%';
+            document.getElementById('refreshText').innerText = `${secondsLeft}s`;
+        }
+        function refreshNow() {
+            if (currentStop) {
+                secondsLeft = REFRESH_SECONDS;
+                fetchBuses(currentStop.code, currentStop.name, true);
+            }
+        }
+        // Pausa el refresco cuando la app está en segundo plano
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { clearInterval(countdownInterval); countdownInterval = null; }
+            else if (currentStop) { fetchBuses(currentStop.code, currentStop.name, true); startCountdown(); }
+        });
 
-        // --- 5. LÓGICA DE LA APP (TMB Y MAPAS) ---
+        // --- 7. FAVORITOS (localStorage) ---
+        function getFavs() {
+            try { return JSON.parse(localStorage.getItem('busbcn_favs') || '[]'); } catch { return []; }
+        }
+        function saveFavs(favs) { localStorage.setItem('busbcn_favs', JSON.stringify(favs)); }
+        function isFav(code) { return getFavs().some(f => f.code == code); }
+        function toggleFav() {
+            if (!currentStop) return;
+            let favs = getFavs();
+            if (isFav(currentStop.code)) favs = favs.filter(f => f.code != currentStop.code);
+            else favs.push({ code: currentStop.code, name: currentStop.name || `Parada ${currentStop.code}` });
+            saveFavs(favs);
+            updateFavBtn();
+            renderFavs();
+        }
+        function updateFavBtn() {
+            const btn = document.getElementById('favBtn');
+            btn.classList.toggle('faved', currentStop && isFav(currentStop.code));
+        }
+        function renderFavs() {
+            const favs = getFavs();
+            const section = document.getElementById('favSection');
+            section.style.display = favs.length ? 'block' : 'none';
+            document.getElementById('favChips').innerHTML = favs.map(f => `
+                <div class="chip ${currentStop && currentStop.code == f.code ? 'active' : ''}" onclick="selectStopByCode('${esc(f.code)}', '${esc(f.name)}')">
+                    <span class="chip-star">★</span>
+                    <span class="chip-name">${esc(f.name)}</span>
+                </div>`).join('');
+        }
+
+        // --- 8. PARADAS CERCANAS (chips + marcadores) ---
+        function renderNearbyChips() {
+            const section = document.getElementById('nearbySection');
+            section.style.display = nearbyStops.length ? 'block' : 'none';
+            document.getElementById('nearbyChips').innerHTML = nearbyStops.map(s => `
+                <div class="chip ${currentStop && currentStop.code == s.ref ? 'active' : ''}" data-ref="${esc(s.ref)}" onclick="selectNearbyStop('${esc(s.ref)}')">
+                    <span class="chip-name">${esc(s.name)}</span>
+                    <span class="chip-dist">${fmtDist(s.dist)}</span>
+                </div>`).join('');
+        }
+        function selectNearbyStop(ref) {
+            const stop = nearbyStops.find(s => s.ref == ref);
+            if (!stop) return;
+            map.setView([stop.lat, stop.lon], 17);
+            fetchBuses(stop.ref, stop.name);
+        }
+        function selectStopByCode(code, name) {
+            fetchBuses(code, name);
+        }
+        function highlightMarkers() {
+            Object.entries(stopMarkers).forEach(([ref, marker]) => {
+                marker.setIcon(stopPinIcon(currentStop && currentStop.code == ref));
+            });
+        }
+
+        // --- 9. TIEMPOS DE LLEGADA (TMB iBus) ---
         async function fetchBuses(stopCode, stopName = "", isSilent = false) {
+            const seq = ++fetchSeq;
+            currentStop = { code: stopCode, name: stopName };
+
             if (!isSilent) {
-                hideMessages();
-                document.getElementById('results').innerHTML = '';
-                document.getElementById('loading').style.display = 'block';
-                document.getElementById('loading').innerText = "⏳ Consultando a TMB...";
-                document.getElementById('refreshTimer').innerText = '';
+                hideError();
+                setLoading(null);
+                showSkeleton();
                 document.getElementById('stopCode').value = stopCode;
                 routeLayer.clearLayers();
-                activeRouteLine = null;
+                activeRoute = null;
                 activeRouteHTML = "";
             }
-            
+
             try {
                 const url = `https://api.tmb.cat/v1/ibus/stops/${stopCode}?app_id=${APP_ID}&app_key=${APP_KEY}`;
                 const res = await fetch(url);
                 if (!res.ok) throw new Error('Parada no encontrada en TMB.');
-                
                 const data = await res.json();
-                renderBuses(data.data.ibus, stopCode, stopName, isSilent);
-                startAutoRefresh(stopCode, stopName);
+                if (seq !== fetchSeq) return; // llegó tarde: el usuario ya pidió otra parada
+
+                renderStopCard(stopCode, stopName);
+                renderBuses(data.data.ibus, stopCode, isSilent);
+                renderFavs();
+                renderNearbyChips();
+                highlightMarkers();
+                startCountdown();
             } catch (err) {
-                if (!isSilent) showError("Error al obtener los buses: " + err.message);
+                if (seq !== fetchSeq) return;
+                if (!isSilent) {
+                    document.getElementById('results').innerHTML = '';
+                    showError("No se han podido obtener los buses: " + err.message);
+                }
             }
         }
 
-        function renderBuses(buses, stopCode, stopName, isSilent) {
-            hideMessages();
-            const titleHtml = stopName ? 
-                `📍 ${stopName} <br><small style="color:#888; font-size:0.85rem">Cód: ${stopCode}</small>` : 
-                `📍 Parada: ${stopCode}`;
-            document.getElementById('stopTitle').innerHTML = titleHtml;
+        function renderStopCard(stopCode, stopName) {
+            document.getElementById('stopCard').style.display = 'block';
+            document.getElementById('stopName').innerText = stopName || `Parada ${stopCode}`;
+            document.getElementById('stopCodeLabel').innerText = `Código ${stopCode}`;
+            updateFavBtn();
+        }
 
+        function etaHTML(min) {
+            if (min <= 0) return `<div class="bus-time now">Llegando</div>`;
+            const cls = min <= 3 ? 'soon' : '';
+            return `<div class="bus-time ${cls}">${min}<small>min</small></div>`;
+        }
+
+        function renderBuses(buses, stopCode, isSilent) {
+            hideError();
+            setLoading(null);
             const container = document.getElementById('results');
 
             if (!buses || buses.length === 0) {
-                container.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">No hay buses previstos para esta parada.</div>';
+                container.innerHTML = `<div class="empty-state"><div class="big">🌙</div>No hay buses previstos para esta parada ahora mismo.</div>`;
                 return;
             }
 
+            const sorted = [...buses].sort((a, b) => a['t-in-min'] - b['t-in-min']);
             let html = '';
-            buses.forEach(bus => {
+            sorted.forEach(bus => {
                 const animClass = isSilent ? 'blink' : '';
-                const isExpanded = (bus.line === activeRouteLine);
-                const displayStyle = isExpanded ? 'block' : 'none';
-                const itinContent = isExpanded ? activeRouteHTML : '';
-
+                const isExpanded = activeRoute && activeRoute.line === bus.line;
+                const color = lineColor(bus.line);
                 html += `
-                    <div class="bus-card">
-                        <div class="bus-card-content ${animClass}" onclick="toggleRoute('${bus.line}', '${stopCode}', this.parentElement)">
-                            <div class="bus-line">${bus.line}</div>
+                    <div class="bus-card ${isExpanded ? 'open' : ''}">
+                        <div class="bus-card-content ${animClass}" onclick="toggleRoute('${esc(bus.line)}', '${esc(bus.routeId)}', '${esc(stopCode)}', this.parentElement)">
+                            <div class="bus-line" style="background:${color}">${esc(bus.line)}</div>
                             <div class="bus-info">
-                                <div class="bus-dest">${bus.destination}</div>
+                                <div class="bus-dest-label">hacia</div>
+                                <div class="bus-dest">${esc(bus.destination)}</div>
                             </div>
-                            <div class="bus-time">${bus['t-in-min']}<span>min</span></div>
+                            <div class="bus-eta">${etaHTML(bus['t-in-min'])}</div>
+                            <div class="bus-chevron">▼</div>
                         </div>
-                        <div class="bus-itinerary" data-line="${bus.line}" style="display: ${displayStyle};" onclick="event.stopPropagation()">
-                            ${itinContent}
+                        <div class="bus-itinerary" style="display:${isExpanded ? 'block' : 'none'}" onclick="event.stopPropagation()">
+                            ${isExpanded ? activeRouteHTML : ''}
                         </div>
-                    </div>
-                `;
+                    </div>`;
             });
             container.innerHTML = html;
         }
 
-        async function toggleRoute(line, stopCode, cardElement) {
+        // --- 10. ITINERARIO DE LÍNEA ---
+        // La API necesita el código numérico de línea (p.ej. V15 = 215). El routeId del
+        // iBus lo lleva incluido: routeId "2151" = línea 215, sentido 1.
+        async function toggleRoute(line, routeId, stopCode, cardElement) {
             const itineraryDiv = cardElement.querySelector('.bus-itinerary');
-            
+
             if (itineraryDiv.style.display === 'block') {
                 itineraryDiv.style.display = 'none';
+                cardElement.classList.remove('open');
                 routeLayer.clearLayers();
-                activeRouteLine = null;
+                activeRoute = null;
                 activeRouteHTML = "";
                 return;
             }
 
             document.querySelectorAll('.bus-itinerary').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.bus-card').forEach(el => el.classList.remove('open'));
             routeLayer.clearLayers();
-            
-            activeRouteLine = line;
+
+            activeRoute = { line, routeId };
+            cardElement.classList.add('open');
             itineraryDiv.style.display = 'block';
-            itineraryDiv.innerHTML = '<div style="text-align:center; color:#666; padding: 10px;"><div class="loader-small"></div> Trazando ruta...</div>';
+            itineraryDiv.innerHTML = '<div style="text-align:center; color:var(--text-soft); padding:10px;"><div class="loader-small"></div> Trazando ruta...</div>';
 
             try {
-                const url = `https://api.tmb.cat/v1/transit/linies/bus/${line}/parades?app_id=${APP_ID}&app_key=${APP_KEY}`;
+                const rid = parseInt(routeId, 10);
+                const lineCode = Math.floor(rid / 10);
+                const sentit = rid % 10;
+
+                const url = `https://api.tmb.cat/v1/transit/linies/bus/${lineCode}/parades?app_id=${APP_ID}&app_key=${APP_KEY}`;
                 const res = await fetch(url);
                 if (!res.ok) throw new Error('Ruta no disponible');
-                
                 const data = await res.json();
-                
-                const currentStopFeature = data.features.find(f => f.properties.CODI_PARADA == stopCode);
-                if (!currentStopFeature) throw new Error('No se ha podido localizar el sentido del recorrido');
 
-                const sentit = currentStopFeature.properties.SENTIT;
-                const ordre = currentStopFeature.properties.ORDRE;
+                let current = data.features.find(f => f.properties.CODI_PARADA == stopCode && f.properties.SENTIT == sentit)
+                           || data.features.find(f => f.properties.CODI_PARADA == stopCode);
+                if (!current) throw new Error('No se ha podido localizar el recorrido');
 
-                let stops = data.features
-                    .filter(f => f.properties.SENTIT === sentit && f.properties.ORDRE >= ordre)
+                const dir = current.properties.SENTIT;
+                const ordre = current.properties.ORDRE;
+                const stops = data.features
+                    .filter(f => f.properties.SENTIT === dir && f.properties.ORDRE >= ordre)
                     .sort((a, b) => a.properties.ORDRE - b.properties.ORDRE);
 
+                const color = lineColor(line);
                 let html = '<div>';
-                let latlngs = [];
+                const latlngs = [];
 
                 stops.forEach((stop, index) => {
                     const isFirst = index === 0;
                     const isLast = index === stops.length - 1;
-                    const color = isFirst ? 'var(--primary)' : (isLast ? '#059669' : '#2196F3');
-                    
+                    const dotColor = isFirst ? '#da291c' : (isLast ? '#0a8f4e' : color);
                     const latlng = [stop.geometry.coordinates[1], stop.geometry.coordinates[0]];
                     latlngs.push(latlng);
 
                     L.circleMarker(latlng, {
-                        radius: (isFirst || isLast) ? 6 : 4,
-                        color: color,
-                        fillColor: 'white',
-                        fillOpacity: 1,
-                        weight: 3
-                    }).bindPopup(`<b>${stop.properties.NOM_PARADA}</b>`).addTo(routeLayer);
+                        radius: (isFirst || isLast) ? 7 : 4.5,
+                        color: dotColor, fillColor: '#fff', fillOpacity: 1, weight: 3
+                    }).bindPopup(`<b>${esc(stop.properties.NOM_PARADA)}</b>`).addTo(routeLayer);
 
                     html += `
                         <div class="itinerary-node">
-                            <div class="node-dot" style="background: ${color}"></div>
-                            <div class="node-name" style="font-weight: ${isFirst||isLast ? 'bold' : 'normal'}">
-                                ${stop.properties.NOM_PARADA}
-                            </div>
-                        </div>
-                    `;
+                            <div class="node-dot" style="background:${dotColor}"></div>
+                            <div class="node-name ${isFirst || isLast ? 'hl' : ''}">${esc(stop.properties.NOM_PARADA)}</div>
+                        </div>`;
                 });
                 html += '</div>';
 
-                L.polyline(latlngs, {color: '#2196F3', weight: 4, opacity: 0.7}).addTo(routeLayer);
-                map.fitBounds(routeLayer.getBounds(), {padding: [20, 20]});
+                L.polyline(latlngs, { color: color, weight: 5, opacity: .75 }).addTo(routeLayer);
+                map.fitBounds(routeLayer.getBounds(), { padding: [25, 25] });
 
                 itineraryDiv.innerHTML = html;
                 activeRouteHTML = html;
-
             } catch (err) {
-                itineraryDiv.innerHTML = `<div style="color:var(--primary); text-align:center; padding:10px;">❌ ${err.message}</div>`;
+                itineraryDiv.innerHTML = `<div style="color:var(--primary); text-align:center; padding:10px; font-weight:600;">❌ ${esc(err.message)}</div>`;
                 activeRouteHTML = itineraryDiv.innerHTML;
             }
         }
 
+        // --- 11. BÚSQUEDA MANUAL ---
         function searchManual() {
-            const code = document.getElementById('stopCode').value;
-            if (!code || code.trim() === '') {
-                showError("Escribe el código de la parada.");
+            const code = document.getElementById('stopCode').value.trim();
+            if (!code) {
+                showError("Escribe el código de la parada (está en el poste o marquesina).");
                 return;
             }
-            clearInterval(countdownInterval); 
-            fetchBuses(code.trim());
+            document.getElementById('stopCode').blur();
+            fetchBuses(code);
         }
 
+        // --- 12. BÚSQUEDA POR GPS (Overpass OSM) ---
         async function fetchOverpass(query) {
-            for (let url of OVERPASS_ENDPOINTS) {
+            for (const url of OVERPASS_ENDPOINTS) {
                 try {
                     const res = await fetch(url, {
-                        method: "POST", 
+                        method: "POST",
                         headers: { "Content-Type": "application/x-www-form-urlencoded" },
                         body: `data=${encodeURIComponent(query)}`
                     });
-                    if (res.ok) {
-                        return await res.json(); 
-                    } else {
-                        console.warn("Servidor ocupado:", url);
-                    }
+                    if (res.ok) return await res.json();
+                    console.warn("Servidor ocupado:", url);
                 } catch (e) {
                     console.warn("Fallo de conexión con servidor:", url);
                 }
             }
-            throw new Error("Todos los mapas están muy ocupados. Inténtalo en unos minutos o busca por Nº de parada.");
+            throw new Error("El servicio de mapas está saturado. Inténtalo en unos minutos o busca por nº de parada.");
+        }
+
+        async function findNearbyStops(lat, lon) {
+            // Empieza con 400 m y amplía si no hay nada
+            for (const radius of [400, 900]) {
+                const query = `[out:json][timeout:10];node["highway"="bus_stop"](around:${radius},${lat},${lon});out body;`;
+                const osmData = await fetchOverpass(query);
+                if (osmData.elements && osmData.elements.length > 0) return osmData.elements;
+            }
+            return [];
         }
 
         function searchGPS() {
-            hideMessages();
-            clearInterval(countdownInterval);
+            hideError();
+            stopCountdown();
             document.getElementById('results').innerHTML = '';
-            document.getElementById('stopTitle').innerHTML = '';
-            document.getElementById('refreshTimer').innerText = '';
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('loading').innerText = "📍 Buscando señal GPS...";
+            document.getElementById('stopCard').style.display = 'none';
+            currentStop = null;
+            setLoading("📍 Buscando señal GPS...");
             routeLayer.clearLayers();
 
             if (!navigator.geolocation) {
-                showError("Tu móvil no soporta GPS.");
+                showError("Este dispositivo no soporta GPS.");
                 return;
             }
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
-                document.getElementById('loading').innerText = "📡 Descargando mapa...";
-                
+                setLoading("🗺️ Buscando paradas cercanas...");
+
                 map.setView([lat, lon], 16);
                 userMarkerLayer.clearLayers();
-                L.marker([lat, lon], {icon: userIcon}).addTo(userMarkerLayer).bindPopup("<b>Tú estás aquí</b>").openPopup();
+                L.marker([lat, lon], { icon: userIcon, zIndexOffset: 500 }).addTo(userMarkerLayer).bindPopup("<b>Estás aquí</b>");
 
                 try {
-                    const query = `[out:json][timeout:10];node["highway"="bus_stop"](around:400,${lat},${lon});out body;`;
-                    
-                    const osmData = await fetchOverpass(query);
-                    
-                    if (!osmData.elements || osmData.elements.length === 0) {
-                        showError("No estás a menos de 400m de ninguna parada.");
+                    const elements = await findNearbyStops(lat, lon);
+                    if (elements.length === 0) {
+                        showError("No hay paradas de bus a menos de 900 m de tu posición.", "searchGPS");
                         return;
                     }
 
-                    const stops = osmData.elements.map(e => {
-                        let codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
-                        let cleanCode = codeStr.replace(/\D/g, ''); 
+                    nearbyStops = elements.map(e => {
+                        const codeStr = e.tags.ref || e.tags['tmb:ref'] || e.tags['local_ref'] || "";
+                        const cleanCode = codeStr.replace(/\D/g, '');
                         return {
                             ref: (cleanCode.length > 0 && cleanCode.length <= 4) ? cleanCode : null,
                             name: e.tags.name || `Parada ${cleanCode}`,
                             lat: e.lat, lon: e.lon,
                             dist: getDistance(lat, lon, e.lat, e.lon)
                         };
-                    }).filter(e => e.ref !== null).sort((a, b) => a.dist - b.dist);
+                    }).filter(e => e.ref !== null).sort((a, b) => a.dist - b.dist).slice(0, 12);
 
-                    if (stops.length === 0) {
-                        showError("Hay paradas cerca, pero no tienen código en el mapa.");
+                    if (nearbyStops.length === 0) {
+                        showError("Hay paradas cerca, pero no tienen código registrado en el mapa. Busca por nº de parada.");
                         return;
                     }
 
                     markersLayer.clearLayers();
-                    stops.forEach(stop => {
-                        const marker = L.marker([stop.lat, stop.lon], {icon: busIcon}).addTo(markersLayer);
+                    stopMarkers = {};
+                    nearbyStops.forEach(stop => {
+                        const marker = L.marker([stop.lat, stop.lon], { icon: stopPinIcon(false) }).addTo(markersLayer);
+                        marker.bindPopup(`<b>${esc(stop.name)}</b><br><small>a ${fmtDist(stop.dist)}</small>`);
                         marker.on('click', () => {
                             map.setView([stop.lat, stop.lon], 17);
                             fetchBuses(stop.ref, stop.name);
                         });
+                        stopMarkers[stop.ref] = marker;
                     });
+                    renderNearbyChips();
 
-                    document.getElementById('loading').innerText = "⏱️ Conectando con los buses...";
-                    
+                    setLoading("⏱️ Conectando con los buses...");
+
+                    // Elige la parada más cercana que tenga servicio ahora mismo
                     let found = false;
-                    for (let i = 0; i < Math.min(stops.length, 3); i++) {
-                        const stop = stops[i];
-                        const tmbRes = await fetch(`https://api.tmb.cat/v1/ibus/stops/${stop.ref}?app_id=${APP_ID}&app_key=${APP_KEY}`);
-                        
-                        if (tmbRes.ok) {
-                            const data = await tmbRes.json();
-                            if (data.data && data.data.ibus && data.data.ibus.length > 0) {
-                                document.getElementById('stopCode').value = stop.ref;
-                                renderBuses(data.data.ibus, stop.ref, stop.name, false);
-                                startAutoRefresh(stop.ref, stop.name);
-                                found = true;
-                                break;
+                    for (let i = 0; i < Math.min(nearbyStops.length, 3); i++) {
+                        const stop = nearbyStops[i];
+                        try {
+                            const tmbRes = await fetch(`https://api.tmb.cat/v1/ibus/stops/${stop.ref}?app_id=${APP_ID}&app_key=${APP_KEY}`);
+                            if (tmbRes.ok) {
+                                const data = await tmbRes.json();
+                                if (data.data && data.data.ibus && data.data.ibus.length > 0) {
+                                    currentStop = { code: stop.ref, name: stop.name };
+                                    document.getElementById('stopCode').value = stop.ref;
+                                    renderStopCard(stop.ref, stop.name);
+                                    renderBuses(data.data.ibus, stop.ref, false);
+                                    renderFavs();
+                                    renderNearbyChips();
+                                    highlightMarkers();
+                                    startCountdown();
+                                    found = true;
+                                    break;
+                                }
                             }
-                        }
+                        } catch (e) { /* prueba la siguiente */ }
                     }
 
-                    if (!found) fetchBuses(stops[0].ref, stops[0].name);
+                    if (!found) fetchBuses(nearbyStops[0].ref, nearbyStops[0].name);
 
                 } catch (err) {
-                    showError(err.message);
+                    showError(err.message, "searchGPS");
                 }
-            }, (err) => {
-                showError("No has dado permiso al GPS o está desactivado.");
-            }, { timeout: 10000 });
+            }, () => {
+                showError("No has dado permiso de ubicación o el GPS está desactivado. También puedes buscar por nº de parada.");
+            }, { timeout: 10000, maximumAge: 30000 });
         }
     </script>
 </body>
