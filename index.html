@@ -406,6 +406,27 @@
         .ar-label-arr { font-size: .78rem; font-weight: 700; margin-top: 7px; line-height: 1.55; text-align: left; }
         .ar-label-arr .l { display: inline-block; min-width: 22px; padding: 0 6px; border-radius: 6px; color: #fff; font-weight: 800; margin-right: 6px; text-align: center; }
         .ar-label-tap { font-size: .68rem; opacity: .7; margin-top: 5px; }
+        /* Hub multimodal: varios iconos en una chapa alargada */
+        .ar-cluster {
+            display: flex; align-items: center; gap: 3px; font-size: 20px; line-height: 1;
+            background: rgba(18,20,24,.9); border: 3px solid #fff; border-radius: 22px; padding: 5px 9px;
+            box-shadow: 0 3px 10px rgba(0,0,0,.6); transition: transform .18s ease;
+        }
+        .ar-label.compact .ar-cluster { padding: 3px 7px; font-size: 15px; border-width: 2.5px; gap: 2px; }
+        .ar-label.focus .ar-cluster { transform: scale(1.1); }
+        /* Fila de modos sobre el nombre (en la tarjeta) */
+        .ar-modes { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-bottom: 6px; }
+        .ar-mchip { font-size: .66rem; font-weight: 800; padding: 2px 8px; border-radius: 20px; background: rgba(255,255,255,.14); }
+        .ar-mchip.metro { background: rgba(225,5,30,.3); }
+        .ar-mchip.tram  { background: rgba(0,168,132,.32); }
+        .ar-mchip.bus   { background: rgba(255,90,77,.26); }
+        /* Salidas agrupadas por modo al tocar */
+        .ar-label-arr { max-height: 190px; overflow-y: auto; }
+        .ar-grp-h { font-weight: 800; font-size: .72rem; opacity: .92; margin: 7px 0 2px; text-align: left; }
+        .ar-grp-h:first-child { margin-top: 0; }
+        .ar-grp-e { font-size: .72rem; opacity: .55; text-align: left; }
+        .ar-dep { text-align: left; }
+        .ar-dep small { opacity: .7; font-weight: 600; }
         /* Retícula central: guía "apunta aquí" */
         .ar-reticle {
             position: absolute; top: 50%; left: 50%; width: 54px; height: 54px; transform: translate(-50%,-50%);
@@ -1970,7 +1991,11 @@
 
         // Menos ruido en AR: solo 300 m, sin paradas con el mismo nombre (nos quedamos
         // con la más cercana) y como mucho 7 — para no saturar la vista de la cámara
+        const MODE_ORDER = { metro: 0, tram: 1, bus: 2 };
+        const MODE_RING = { bus: '#ff5a4d', metro: '#e1051e', tram: '#00a884' };
+
         function arTrim(list) {
+            // 1. filtra a 300 m y quita paradas con el mismo nombre (deja la más cercana)
             const byName = new Map();
             for (const s of list) {
                 if (s.dist > 300) continue;
@@ -1978,39 +2003,73 @@
                 const cur = byName.get(k);
                 if (!cur || s.dist < cur.dist) byName.set(k, s);
             }
-            // metro y tram pesan menos (más útiles): entran aunque estén algo más lejos
-            const rank = s => s.dist - (s.type === 'bus' ? 0 : 150);
-            return [...byName.values()].sort((a, b) => rank(a) - rank(b)).slice(0, 7).sort((a, b) => a.dist - b.dist);
+            const uniq = [...byName.values()].sort((a, b) => a.dist - b.dist);
+
+            // 2. agrupa en un mismo hub las paradas cercanas (a ≤100 m de CUALQUIER
+            //    miembro ya añadido), para que plazas grandes con metro+bus se unan
+            const HUB_RADIUS = 100;
+            const hubs = [];
+            for (const s of uniq) {
+                let hub = hubs.find(h => h.members.some(mem => getDistance(mem.lat, mem.lon, s.lat, s.lon) <= HUB_RADIUS));
+                if (!hub) { hub = { members: [], modes: [], name: s.name, lat: s.lat, lon: s.lon, dist: s.dist }; hubs.push(hub); }
+                hub.members.push(s);
+                if (!hub.modes.includes(s.type)) hub.modes.push(s.type);
+                if (s.dist < hub.dist) hub.dist = s.dist;
+            }
+            // nombre y ancla del hub = su modo de mayor prioridad (metro > tram > bus)
+            for (const h of hubs) {
+                h.modes.sort((a, b) => (MODE_ORDER[a] ?? 9) - (MODE_ORDER[b] ?? 9));
+                const lead = h.members.slice().sort((a, b) => (MODE_ORDER[a.type] ?? 9) - (MODE_ORDER[b.type] ?? 9) || a.dist - b.dist)[0];
+                h.name = lead.name; h.lat = lead.lat; h.lon = lead.lon;
+            }
+            // 3. prioriza hubs con metro/tram y multimodales; como mucho 7
+            const rank = h => h.dist - (h.modes.some(m => m !== 'bus') ? 150 : 0) - (h.modes.length > 1 ? 40 : 0);
+            return hubs.sort((a, b) => rank(a) - rank(b)).slice(0, 7).sort((a, b) => a.dist - b.dist);
         }
 
-        function buildArLabel(s) {
+        function buildArLabel(hub) {
             const el = document.createElement('div');
             el.className = 'ar-label';
-            el.innerHTML = `<div class="ar-badge ${s.type}">${MODE_ICON[s.type] || '📍'}</div>
+            const multi = hub.modes.length > 1;
+            const badge = multi
+                ? `<div class="ar-cluster" style="border-color:${MODE_RING[hub.modes[0]] || '#fff'}">${hub.modes.map(m => `<span>${MODE_ICON[m]}</span>`).join('')}</div>`
+                : `<div class="ar-badge ${hub.modes[0]}">${MODE_ICON[hub.modes[0]] || '📍'}</div>`;
+            el.innerHTML = `${badge}
                 <div class="ar-mini"></div>
                 <div class="ar-label-card">
-                    <div class="ar-label-name">${esc(s.name)}</div>
+                    <div class="ar-modes">${hub.modes.map(m => `<span class="ar-mchip ${m}">${MODE_ICON[m]} ${MODE_NAME[m]}</span>`).join('')}</div>
+                    <div class="ar-label-name">${esc(hub.name)}</div>
                     <div class="ar-label-meta"></div>
                     <div class="ar-label-arr" style="display:none"></div>
-                    <div class="ar-label-tap">Toca para ver llegadas</div>
+                    <div class="ar-label-tap">${multi ? 'Toca para ver próximos transportes' : 'Toca para ver llegadas'}</div>
                 </div>`;
-            el.addEventListener('click', () => toggleArArrivals(s, el));
+            el.addEventListener('click', () => toggleArArrivals(hub, el));
             return el;
         }
 
-        async function toggleArArrivals(s, el) {
+        async function toggleArArrivals(hub, el) {
             const box = el.querySelector('.ar-label-arr');
             if (box.dataset.open === '1') { box.style.display = 'none'; box.dataset.open = '0'; return; }
             box.style.display = 'block'; box.dataset.open = '1'; box.innerHTML = '⏳';
-            try {
-                let deps = [];
-                if (s.type === 'bus') deps = await fetchBusArrivals(s);
-                else if (s.type === 'metro') deps = await fetchMetroArrivals(s);
-                else deps = await fetchTramArrivals(s);
-                box.innerHTML = deps.length
-                    ? deps.slice(0, 3).map(d => `<div><span class="l" style="background:${d.color}">${esc(d.line)}</span>${d.mins <= 0 ? 'ahora' : d.mins + ' min'}</div>`).join('')
-                    : 'Sin próximos pasos ahora';
-            } catch { box.innerHTML = 'No disponible'; }
+            // pide las salidas de cada parada del hub en paralelo y agrupa por modo
+            const results = await Promise.all(hub.members.map(async m => {
+                try {
+                    let deps = [];
+                    if (m.type === 'bus') deps = await fetchBusArrivals(m);
+                    else if (m.type === 'metro') deps = await fetchMetroArrivals(m);
+                    else deps = await fetchTramArrivals(m);
+                    return { type: m.type, deps };
+                } catch { return { type: m.type, deps: [] }; }
+            }));
+            const byMode = {};
+            results.forEach(({ type, deps }) => { (byMode[type] = byMode[type] || []).push(...deps); });
+            box.innerHTML = hub.modes.map(mode => {
+                const deps = (byMode[mode] || []).filter(d => d.arriveAt).sort((a, b) => a.arriveAt - b.arriveAt);
+                const head = `<div class="ar-grp-h">${MODE_ICON[mode]} ${MODE_NAME[mode]}</div>`;
+                if (!deps.length) return head + '<div class="ar-grp-e">Sin próximos pasos ahora</div>';
+                return head + deps.slice(0, 4).map(d =>
+                    `<div class="ar-dep"><span class="l" style="background:${d.color}">${esc(d.line)}</span>${d.mins <= 0 ? 'ahora' : d.mins + ' min'} <small>${esc((d.dest || '').slice(0, 18))}</small></div>`).join('');
+            }).join('');
         }
 
         function renderArScene() {
@@ -2053,8 +2112,7 @@
                     el.querySelector('.ar-mini').innerText = fmtDist(dist);
                     if (isFocus) {
                         const walk = Math.max(1, Math.ceil(dist / 75));
-                        el.querySelector('.ar-label-meta').innerText =
-                            `${MODE_NAME[s.type]}${s.lines ? ' · ' + s.lines : ''} · ${fmtDist(dist)} · ${walk} min 🚶`;
+                        el.querySelector('.ar-label-meta').innerText = `a ${fmtDist(dist)} · ${walk} min 🚶`;
                     }
                 });
                 setArHint(focus ? null : 'Apunta a una parada para ver sus llegadas 🎯');
@@ -2101,8 +2159,8 @@
         function arPanelFallback() {
             const fb = document.getElementById('arFallback');
             fb.innerHTML = arState.stops.length
-                ? '<h3>📍 Paradas a tu alrededor</h3>' + arState.stops.map(s =>
-                    `<div class="ar-fb-stop"><span style="font-size:22px">${MODE_ICON[s.type] || '📍'}</span><div><b>${esc(s.name)}</b><br><small>${MODE_NAME[s.type]}</small></div><span class="d">${fmtDist(s.dist)}</span></div>`).join('')
+                ? '<h3>📍 Paradas a tu alrededor</h3>' + arState.stops.map(h =>
+                    `<div class="ar-fb-stop"><span style="font-size:20px; white-space:nowrap">${h.modes.map(m => MODE_ICON[m]).join(' ')}</span><div><b>${esc(h.name)}</b><br><small>${h.modes.map(m => MODE_NAME[m]).join(' · ')}</small></div><span class="d">${fmtDist(h.dist)}</span></div>`).join('')
                 : '<h3>Buscando paradas cercanas…</h3>';
             fb.style.display = 'flex';
         }
