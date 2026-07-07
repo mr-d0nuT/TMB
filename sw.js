@@ -1,7 +1,7 @@
 // Service worker de Transport BCN: cachea la carcasa de la app para que
 // arranque al instante y funcione la interfaz sin red. Los datos en tiempo
 // real (TMB, TRAM, Overpass) y los tiles del mapa NUNCA se cachean.
-const CACHE = 'transport-bcn-v5';
+const CACHE = 'transport-bcn-v6';
 const SHELL = ['./', './index.html', './icon.svg', './manifest.webmanifest', './assets/logo_donut.png'];
 
 self.addEventListener('install', e => {
@@ -27,6 +27,18 @@ self.addEventListener('fetch', e => {
                 caches.open(CACHE).then(c => c.put('./index.html', copy));
                 return res;
             }).catch(() => caches.match('./index.html'))
+        );
+        return;
+    }
+
+    // Los horarios precompilados se regeneran cada semana: red primero, caché de respaldo
+    if (url.origin === location.origin && url.pathname.endsWith('hispano-igualadina.json')) {
+        e.respondWith(
+            fetch(e.request).then(res => {
+                const copy = res.clone();
+                caches.open(CACHE).then(c => c.put(e.request, copy));
+                return res;
+            }).catch(() => caches.match(e.request))
         );
         return;
     }

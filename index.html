@@ -437,7 +437,19 @@
         .ar-edge { position: absolute; top: 50%; transform: translateY(-50%); z-index: 5; color: #fff; font-size: 26px; opacity: .85; text-shadow: 0 1px 3px #000; pointer-events: none; }
         /* Guía del trayecto / destino */
         .ar-guide { position: absolute; top: 46%; left: 50%; transform: translate(-50%,-50%); z-index: 6; text-align: center; color: #fff; pointer-events: none; display: none; }
-        .ar-guide-arrow { font-size: 72px; line-height: 1; filter: drop-shadow(0 3px 8px rgba(0,0,0,.7)); transition: transform .15s linear; }
+        .ar-guide-arrow { width: 120px; height: 130px; margin: 0 auto; transition: transform .15s linear; }
+        .ar-arrow-tilt { width: 100%; height: 100%; transform: perspective(340px) rotateX(52deg); transform-style: preserve-3d; }
+        .ar-arrow-anim { width: 100%; height: 100%; animation: arrFloat 1.5s ease-in-out infinite; filter: drop-shadow(0 14px 10px rgba(0,0,0,.55)); }
+        @keyframes arrFloat { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-14px) scale(1.05); } }
+        .ar-guide-arrow .chv { animation: chvFlow 1.15s ease-in-out infinite; }
+        .ar-guide-arrow .c1 { animation-delay: 0s; }
+        .ar-guide-arrow .c2 { animation-delay: .18s; }
+        .ar-guide-arrow .c3 { animation-delay: .36s; }
+        @keyframes chvFlow {
+            0% { opacity: .25; transform: translateY(6px); }
+            35% { opacity: 1; transform: translateY(0); }
+            100% { opacity: .25; transform: translateY(-6px); }
+        }
         .ar-guide-text { margin-top: 2px; font-weight: 800; font-size: .95rem; background: rgba(0,0,0,.5); display: inline-block; padding: 4px 12px; border-radius: 20px; }
         .ar-fallback { position: absolute; inset: 0; z-index: 7; display: none; flex-direction: column; padding: 78px 20px 20px; color: #fff; gap: 12px; overflow-y: auto; }
         .ar-fallback h3 { font-size: 1.05rem; margin-bottom: 4px; }
@@ -561,7 +573,32 @@
         <div id="arScene"></div>
         <div class="ar-reticle" id="arReticle"></div>
         <div class="ar-guide" id="arGuide">
-            <div class="ar-guide-arrow" id="arGuideArrow">⬆️</div>
+            <div class="ar-guide-arrow" id="arGuideArrow">
+                <div class="ar-arrow-tilt"><div class="ar-arrow-anim">
+                    <svg viewBox="0 0 120 146" width="120" height="146" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="arrTop" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0" stop-color="#8df5cf"/><stop offset="1" stop-color="#0aa2e0"/>
+                            </linearGradient>
+                            <linearGradient id="arrDeep" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0" stop-color="#065e86"/><stop offset="1" stop-color="#03344b"/>
+                            </linearGradient>
+                        </defs>
+                        <g class="chv c1">
+                            <path d="M60 88 L106 132 L86 142 L60 118 L34 142 L14 132 Z" fill="url(#arrDeep)"/>
+                            <path d="M60 80 L106 124 L86 134 L60 110 L34 134 L14 124 Z" fill="url(#arrTop)" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+                        </g>
+                        <g class="chv c2">
+                            <path d="M60 50 L106 94 L86 104 L60 80 L34 104 L14 94 Z" fill="url(#arrDeep)"/>
+                            <path d="M60 42 L106 86 L86 96 L60 72 L34 96 L14 86 Z" fill="url(#arrTop)" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+                        </g>
+                        <g class="chv c3">
+                            <path d="M60 12 L106 56 L86 66 L60 42 L34 66 L14 56 Z" fill="url(#arrDeep)"/>
+                            <path d="M60 4 L106 48 L86 58 L60 34 L34 58 L14 48 Z" fill="url(#arrTop)" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+                        </g>
+                    </svg>
+                </div></div>
+            </div>
             <div class="ar-guide-text" id="arGuideText"></div>
         </div>
         <div class="ar-fallback" id="arFallback"></div>
@@ -629,8 +666,9 @@
         let activeRouteHTML = "";
         let fetchSeq = 0;                // descarta respuestas obsoletas
 
-        const MODE_ICON = { bus: '🚌', metro: 'Ⓜ️', tram: '🚊', train: '🚆', fgc: '🚞' };
-        const MODE_NAME = { bus: 'Bus', metro: 'Metro', tram: 'Tram', train: 'Rodalies · Renfe', fgc: 'FGC' };
+        const MODE_ICON = { bus: '🚌', metro: 'Ⓜ️', tram: '🚊', train: '🚆', fgc: '🚞', hbus: '🚐' };
+        const MODE_NAME = { bus: 'Bus', metro: 'Metro', tram: 'Tram', train: 'Rodalies · Renfe', fgc: 'FGC', hbus: 'Hispano Igualadina' };
+        const HBUS_COLOR = '#7b3fa0';
         const renfeColor = line => '#' + (RENFE_COLORS[line] || 'EC0000');
 
         // Colores oficiales TMB por familia de línea de bus
@@ -694,6 +732,14 @@
             } else if (type === 'fgc') {
                 badge = `<circle cx="19" cy="19" r="16" fill="#f07d00" stroke="#fff" stroke-width="3"/>
                          <text x="19" y="26" font-size="20" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial, sans-serif">F</text>`;
+            } else if (type === 'hbus') {
+                badge = `<circle cx="19" cy="19" r="16" fill="#7b3fa0" stroke="#fff" stroke-width="3"/>
+                         <g fill="#fff">
+                           <rect x="11" y="10" width="16" height="13" rx="3"/>
+                           <rect x="13" y="12.5" width="12" height="5" rx="1" fill="#7b3fa0"/>
+                           <circle cx="14.5" cy="25" r="2.2"/>
+                           <circle cx="23.5" cy="25" r="2.2"/>
+                         </g>`;
             } else if (type === 'metro') {
                 badge = `<rect x="3" y="3" width="32" height="32" rx="8" fill="#e1051e" stroke="#fff" stroke-width="3"/>
                          <text x="19" y="27" font-size="22" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial, sans-serif">M</text>`;
@@ -743,6 +789,7 @@
                 if (parts[0] === 'tram' && parts[1] && parts[2]) return { type: 'tram', out: parseInt(parts[1], 10), ret: parseInt(parts[2], 10), name: parts.slice(3).join(':') || 'Parada TRAM' };
                 if (parts[0] === 'train' && parts[1]) return renfeStation(parts[1]) || { type: 'train', code: parts[1], name: parts.slice(2).join(':') || 'Estación' };
                 if (parts[0] === 'fgc' && parts[1]) return fgcStation(parts[1]) || { type: 'fgc', code: parts[1], name: parts.slice(2).join(':') || 'Estación FGC' };
+                if (parts[0] === 'hbus' && parts[1]) return { type: 'hbus', code: parts[1], name: parts.slice(2).join(':') || 'Parada Hispano Igualadina' };
             } catch {}
             return null;
         }
@@ -963,6 +1010,7 @@
                 else if (stop.type === 'metro') departures = await fetchMetroArrivals(stop);
                 else if (stop.type === 'train') departures = await fetchTrainArrivals(stop);
                 else if (stop.type === 'fgc') departures = await fetchFgcArrivals(stop);
+                else if (stop.type === 'hbus') departures = await fetchHbusArrivals(stop);
                 else departures = await fetchTramArrivals(stop);
 
                 if (seq !== fetchSeq) return; // llegó tarde: el usuario ya pidió otra parada
@@ -995,6 +1043,7 @@
                       : stop.type === 'metro' ? `${MODE_ICON.metro} Metro${stop.lines ? ' · ' + stop.lines : ''}`
                       : stop.type === 'train' ? `${MODE_ICON.train} Rodalies · Renfe${trainLines ? ' · ' + trainLines : ''}`
                       : stop.type === 'fgc' ? `${MODE_ICON.fgc} Ferrocarrils de la Generalitat`
+                      : stop.type === 'hbus' ? `${MODE_ICON.hbus} Hispano Igualadina · bus interurbà`
                       : `${MODE_ICON.tram} Tram`;
             document.getElementById('stopCodeLabel').innerText = sub;
             const walkEl = document.getElementById('walkHint');
@@ -1014,6 +1063,7 @@
                     : stop.type === 'metro' ? `metro:${stop.id}:${stop.name || ''}`
                     : stop.type === 'train' ? `train:${stop.code}:${stop.name || ''}`
                     : stop.type === 'fgc' ? `fgc:${stop.code}:${stop.name || ''}`
+                    : stop.type === 'hbus' ? `hbus:${stop.code}:${stop.name || ''}`
                     : `tram:${stop.out}:${stop.ret}:${stop.name || ''}`;
             return `${base}#p=${encodeURIComponent(p)}`;
         }
@@ -1360,6 +1410,59 @@
                 });
             });
             if (departures.length === 0) throw new Error('Sin salidas previstas en las próximas 2 horas.');
+            return departures;
+        }
+
+        // --- 10D. HISPANO IGUALADINA (bus interurbà; horario oficial del GTFS de la
+        // Generalitat, precompilado semanalmente en hispano-igualadina.json) ---
+        let hispanoData = null;
+        async function ensureHispano() {
+            if (hispanoData) return hispanoData;
+            const res = await fetch('./hispano-igualadina.json');
+            if (!res.ok) throw new Error('Horarios de la Hispano Igualadina no disponibles.');
+            hispanoData = await res.json();
+            return hispanoData;
+        }
+        const hbusLine = short => short.replace(/^L0+/, 'L');
+
+        async function fetchHbusArrivals(stop) {
+            const d = await ensureHispano();
+            let idx = stop.idx;
+            if (idx === undefined) {
+                idx = d.stops.findIndex(s => s[0] == stop.code);
+                if (idx < 0) throw new Error('Parada no encontrada en los horarios.');
+                stop.idx = idx; stop.name = stop.name || d.stops[idx][1];
+            }
+            const now = new Date();
+            let nowMin = now.getHours() * 60 + now.getMinutes();
+            let svcDay = new Date(now);
+            if (now.getHours() < 4) { svcDay = new Date(now.getTime() - 864e5); nowMin += 1440; } // madrugada = día de servicio anterior
+            const dateKey = svcDay.getFullYear() + String(svcDay.getMonth() + 1).padStart(2, '0') + String(svcDay.getDate()).padStart(2, '0');
+            const active = new Set(d.dates[dateKey] || []);
+            const dayStart = new Date(svcDay); dayStart.setHours(0, 0, 0, 0);
+
+            const groups = new Map();
+            (d.deps[String(idx)] || []).forEach(x => {
+                const [li, svc, dep, hi, arrEnd] = x;
+                if (!active.has(svc) || dep < nowMin || dep > nowMin + 480) return;
+                const k = li + '|' + hi;
+                (groups.get(k) || groups.set(k, []).get(k)).push({ dep, arrEnd, li, hi });
+            });
+
+            const fmtMin = m => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+            const departures = [];
+            groups.forEach(items => {
+                items.sort((a, b) => a.dep - b.dep);
+                const f = items[0];
+                departures.push({
+                    line: hbusLine(d.lines[f.li][0]), color: HBUS_COLOR, dest: d.heads[f.hi],
+                    mins: Math.max(0, f.dep - nowMin),
+                    arriveAt: dayStart.getTime() + f.dep * 60000,
+                    next: `Llegada a destino: ${fmtMin(f.arrEnd)}` + (items[1] ? ` · Siguiente: ${fmtMin(items[1].dep)}` : ''),
+                    occ: null, itinKey: null, itin: null
+                });
+            });
+            if (departures.length === 0) throw new Error('Sin salidas previstas en las próximas 8 horas en esta parada.');
             return departures;
         }
 
@@ -1924,8 +2027,15 @@
             const fgcStops = FGC_STATIONS
                 .map(([code, sname, slat, slon]) => ({ type: 'fgc', code, name: sname, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }))
                 .filter(s => s.dist <= 900);
+            let hbusStops = [];
+            try {
+                const hd = await ensureHispano();
+                hbusStops = hd.stops
+                    .map((s, i) => ({ type: 'hbus', code: s[0], name: s[1], lat: s[2], lon: s[3], idx: i, dist: getDistance(lat, lon, s[2], s[3]) }))
+                    .filter(s => s.dist <= 800);
+            } catch (e) { /* horarios no disponibles: seguimos sin este modo */ }
 
-            nearbyStops = [...busStops, ...metroStops, ...tramStops, ...trainStops, ...fgcStops]
+            nearbyStops = [...busStops, ...metroStops, ...tramStops, ...trainStops, ...fgcStops, ...hbusStops]
                 .map(s => ({ ...s, walkable }))
                 .sort((a, b) => a.dist - b.dist)
                 .slice(0, 15);
@@ -1960,7 +2070,7 @@
             for (let i = 0; i < Math.min(nearbyStops.length, 3); i++) {
                 const stop = nearbyStops[i];
                 if (stop.type === 'train') continue; // el panel de tren es más pesado: solo bajo demanda
-                if (stop.type === 'tram' || stop.type === 'fgc') { fetchArrivals(stop); found = true; break; }
+                if (stop.type === 'tram' || stop.type === 'fgc' || stop.type === 'hbus') { fetchArrivals(stop); found = true; break; }
                 try {
                     const url = stop.type === 'bus'
                         ? `https://api.tmb.cat/v1/ibus/stops/${stop.code}?${TMB_AUTH}`
