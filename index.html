@@ -375,19 +375,44 @@
         .ar-hint { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 6; color: #fff; background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 20px; font-size: .82rem; font-weight: 600; text-align: center; max-width: 90%; }
         .ar-label {
             position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer;
-            display: flex; flex-direction: column; align-items: center; gap: 3px; transition: left .18s linear, top .18s linear, opacity .2s;
-            will-change: left, top;
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            transition: left .22s linear, top .22s linear, opacity .2s; will-change: left, top; z-index: 1000;
         }
-        .ar-label-pin { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); }
+        /* Chapa circular con el color del modo */
+        .ar-badge {
+            width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 22px; line-height: 1; background: rgba(18,20,24,.9); border: 3px solid #fff;
+            box-shadow: 0 3px 10px rgba(0,0,0,.6); transition: transform .18s ease;
+        }
+        .ar-badge.metro { border-color: #e1051e; }
+        .ar-badge.tram  { border-color: #00a884; }
+        .ar-badge.bus   { border-color: #ff5a4d; }
+        /* Modo compacto: paradas a las que NO apuntas — solo chapa pequeña y tenue */
+        .ar-label.compact { gap: 2px; }
+        .ar-label.compact .ar-badge { width: 32px; height: 32px; font-size: 16px; border-width: 2.5px; }
+        .ar-label.compact .ar-label-card { display: none; }
+        .ar-mini { display: none; font-size: .64rem; font-weight: 800; color: #fff; text-shadow: 0 1px 3px #000; background: rgba(0,0,0,.5); padding: 1px 7px; border-radius: 10px; }
+        .ar-label.compact .ar-mini { display: block; }
+        /* Parada enfocada (a la que apuntas): tarjeta completa */
+        .ar-label.focus { z-index: 3000; }
+        .ar-label.focus .ar-badge { transform: scale(1.12); }
         .ar-label-card {
-            background: rgba(20,22,26,.82); color: #fff; border: 1.5px solid rgba(255,255,255,.25);
-            border-radius: 12px; padding: 6px 10px; text-align: center; backdrop-filter: blur(6px);
-            box-shadow: 0 4px 14px rgba(0,0,0,.5); max-width: 190px;
+            background: rgba(18,20,24,.92); color: #fff; border: 1px solid rgba(255,255,255,.22);
+            border-radius: 14px; padding: 9px 13px; text-align: center; backdrop-filter: blur(8px);
+            box-shadow: 0 6px 20px rgba(0,0,0,.55); max-width: 230px;
         }
-        .ar-label-name { font-weight: 800; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
-        .ar-label-meta { font-size: .72rem; opacity: .85; font-weight: 600; margin-top: 1px; }
-        .ar-label-arr { font-size: .74rem; font-weight: 700; margin-top: 3px; line-height: 1.4; }
-        .ar-label-arr .l { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 6px; color: #fff; font-weight: 800; margin-right: 4px; }
+        .ar-label-name { font-weight: 800; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 210px; }
+        .ar-label-meta { font-size: .74rem; opacity: .88; font-weight: 600; margin-top: 3px; }
+        .ar-label-arr { font-size: .78rem; font-weight: 700; margin-top: 7px; line-height: 1.55; text-align: left; }
+        .ar-label-arr .l { display: inline-block; min-width: 22px; padding: 0 6px; border-radius: 6px; color: #fff; font-weight: 800; margin-right: 6px; text-align: center; }
+        .ar-label-tap { font-size: .68rem; opacity: .7; margin-top: 5px; }
+        /* Retícula central: guía "apunta aquí" */
+        .ar-reticle {
+            position: absolute; top: 50%; left: 50%; width: 54px; height: 54px; transform: translate(-50%,-50%);
+            z-index: 4; pointer-events: none; display: none;
+            border: 2px solid rgba(255,255,255,.5); border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(0,0,0,.25);
+        }
+        .ar-reticle::after { content: ''; position: absolute; top: 50%; left: 50%; width: 5px; height: 5px; border-radius: 50%; background: #fff; transform: translate(-50%,-50%); }
         .ar-edge { position: absolute; top: 50%; transform: translateY(-50%); z-index: 5; color: #fff; font-size: 26px; opacity: .85; text-shadow: 0 1px 3px #000; pointer-events: none; }
         /* Guía del trayecto / destino */
         .ar-guide { position: absolute; top: 46%; left: 50%; transform: translate(-50%,-50%); z-index: 6; text-align: center; color: #fff; pointer-events: none; display: none; }
@@ -513,6 +538,7 @@
     <div id="arOverlay">
         <video id="arVideo" autoplay playsinline muted></video>
         <div id="arScene"></div>
+        <div class="ar-reticle" id="arReticle"></div>
         <div class="ar-guide" id="arGuide">
             <div class="ar-guide-arrow" id="arGuideArrow">⬆️</div>
             <div class="ar-guide-text" id="arGuideText"></div>
@@ -1923,9 +1949,7 @@
             catch (e) { setArHint('Necesito tu ubicación para situar las paradas.'); return; }
             userPos = p;
             if (nearbyStops && nearbyStops.length) {
-                arState.stops = nearbyStops
-                    .map(s => ({ ...s, dist: getDistance(p.lat, p.lon, s.lat, s.lon) }))
-                    .filter(s => s.dist <= 400).sort((a, b) => a.dist - b.dist).slice(0, 12);
+                arState.stops = arTrim(nearbyStops.map(s => ({ ...s, dist: getDistance(p.lat, p.lon, s.lat, s.lon) })));
             }
             if (!arState.stops.length) arState.stops = await gatherArStops(p.lat, p.lon);
             if (arState.watchId == null && navigator.geolocation) {
@@ -1941,17 +1965,34 @@
             const bus = (busRes.status === 'fulfilled' ? busRes.value : []).map(s => ({ ...s, dist: getDistance(lat, lon, s.lat, s.lon) }));
             const metro = (metroRes.status === 'fulfilled' ? metroRes.value : []).map(s => ({ type: 'metro', id: s.id, name: s.name, lines: s.lines, lat: s.lat, lon: s.lon, dist: getDistance(lat, lon, s.lat, s.lon) }));
             const tram = TRAM_STOPS.map(([name, slat, slon, out, ret]) => ({ type: 'tram', name, out, ret, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }));
-            return [...bus, ...metro, ...tram].filter(s => s.dist <= 400).sort((a, b) => a.dist - b.dist).slice(0, 12);
+            return arTrim([...bus, ...metro, ...tram]);
+        }
+
+        // Menos ruido en AR: solo 300 m, sin paradas con el mismo nombre (nos quedamos
+        // con la más cercana) y como mucho 7 — para no saturar la vista de la cámara
+        function arTrim(list) {
+            const byName = new Map();
+            for (const s of list) {
+                if (s.dist > 300) continue;
+                const k = s.type + '|' + String(s.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                const cur = byName.get(k);
+                if (!cur || s.dist < cur.dist) byName.set(k, s);
+            }
+            // metro y tram pesan menos (más útiles): entran aunque estén algo más lejos
+            const rank = s => s.dist - (s.type === 'bus' ? 0 : 150);
+            return [...byName.values()].sort((a, b) => rank(a) - rank(b)).slice(0, 7).sort((a, b) => a.dist - b.dist);
         }
 
         function buildArLabel(s) {
             const el = document.createElement('div');
             el.className = 'ar-label';
-            el.innerHTML = `<div class="ar-label-pin">${MODE_ICON[s.type] || '📍'}</div>
+            el.innerHTML = `<div class="ar-badge ${s.type}">${MODE_ICON[s.type] || '📍'}</div>
+                <div class="ar-mini"></div>
                 <div class="ar-label-card">
                     <div class="ar-label-name">${esc(s.name)}</div>
-                    <div class="ar-label-meta">${MODE_NAME[s.type]}</div>
+                    <div class="ar-label-meta"></div>
                     <div class="ar-label-arr" style="display:none"></div>
+                    <div class="ar-label-tap">Toca para ver llegadas</div>
                 </div>`;
             el.addEventListener('click', () => toggleArArrivals(s, el));
             return el;
@@ -1977,33 +2018,54 @@
             const scene = document.getElementById('arScene');
             const up = userPos;
             const haveCompass = up && arState.heading != null && arState.tier === 'compass';
-            const seen = new Set();
+            document.getElementById('arReticle').style.display = haveCompass ? 'block' : 'none';
 
+            // asegura un elemento por parada y calcula cuáles caen en el campo de visión
+            const vis = [];
             arState.stops.forEach((s, idx) => {
                 const id = 'ar_' + idx;
-                seen.add(id);
                 let el = arState.labels.get(id);
                 if (!el) { el = buildArLabel(s); arState.labels.set(id, el); scene.appendChild(el); }
                 if (!haveCompass) { el.style.display = 'none'; return; }
-                const dist = getDistance(up.lat, up.lon, s.lat, s.lon);
-                el.querySelector('.ar-label-meta').innerText = `${MODE_NAME[s.type]} · ${fmtDist(dist)}`;
                 const rel = relAngle(bearingTo(up.lat, up.lon, s.lat, s.lon) - arState.heading);
-                if (Math.abs(rel) > AR_HALF_FOV + 8) { el.style.display = 'none'; return; }
-                el.style.display = 'flex';
-                const near = Math.max(0, Math.min(1, 1 - dist / 400));
-                el.style.left = Math.max(6, Math.min(94, 50 + (rel / AR_HALF_FOV) * 50)) + '%';
-                el.style.top = Math.max(24, Math.min(76, 42 + near * 20 + (idx % 3) * 3)) + '%';
-                el.style.zIndex = String(1000 + Math.round(near * 100));
-                el.querySelector('.ar-label-card').style.transform = `scale(${(0.75 + near * 0.4).toFixed(2)})`;
+                if (Math.abs(rel) > AR_HALF_FOV + 6) { el.style.display = 'none'; return; }
+                vis.push({ s, el, rel, dist: getDistance(up.lat, up.lon, s.lat, s.lon) });
             });
-            arState.labels.forEach((el, id) => { if (!seen.has(id)) { el.remove(); arState.labels.delete(id); } });
+            // borra etiquetas de paradas que ya no existen
+            const live = new Set(arState.stops.map((_, i) => 'ar_' + i));
+            arState.labels.forEach((el, id) => { if (!live.has(id)) { el.remove(); arState.labels.delete(id); } });
+
+            if (haveCompass) {
+                // parada enfocada = la más centrada, solo si apuntas razonablemente a ella
+                let focus = null;
+                vis.forEach(v => { if (Math.abs(v.rel) <= 16 && (!focus || Math.abs(v.rel) < Math.abs(focus.rel))) focus = v; });
+
+                vis.sort((a, b) => a.rel - b.rel).forEach((v, k) => {
+                    const { el, s, rel, dist } = v;
+                    const isFocus = v === focus;
+                    el.style.display = 'flex';
+                    el.classList.toggle('focus', isFocus);
+                    el.classList.toggle('compact', !isFocus);
+                    el.style.left = Math.max(7, Math.min(93, 50 + (rel / AR_HALF_FOV) * 50)) + '%';
+                    el.style.top = (isFocus ? 56 : 28 + (k % 3) * 12) + '%';
+                    el.style.opacity = String(Math.max(0.35, 1 - Math.abs(rel) / (AR_HALF_FOV + 12)));
+                    el.style.zIndex = String(isFocus ? 3000 : 1000 + Math.round(400 - dist));
+                    el.querySelector('.ar-mini').innerText = fmtDist(dist);
+                    if (isFocus) {
+                        const walk = Math.max(1, Math.ceil(dist / 75));
+                        el.querySelector('.ar-label-meta').innerText =
+                            `${MODE_NAME[s.type]}${s.lines ? ' · ' + s.lines : ''} · ${fmtDist(dist)} · ${walk} min 🚶`;
+                    }
+                });
+                setArHint(focus ? null : 'Apunta a una parada para ver sus llegadas 🎯');
+            }
 
             // Marcador flotante del destino
             let de = arState.destEl;
             if (journeyDest && haveCompass) {
                 if (!de) {
-                    de = document.createElement('div'); de.className = 'ar-label';
-                    de.innerHTML = `<div class="ar-label-pin">🎯</div>
+                    de = document.createElement('div'); de.className = 'ar-label focus';
+                    de.innerHTML = `<div class="ar-badge" style="border-color:#ff375f">🎯</div>
                         <div class="ar-label-card" style="border-color:#ff375f">
                             <div class="ar-label-name">${esc(journeyDest.name)}</div>
                             <div class="ar-label-meta ar-dest-dist"></div>
@@ -2012,8 +2074,8 @@
                 }
                 const rel = relAngle(bearingTo(up.lat, up.lon, journeyDest.lat, journeyDest.lon) - arState.heading);
                 de.querySelector('.ar-dest-dist').innerText = 'Destino · ' + fmtDist(getDistance(up.lat, up.lon, journeyDest.lat, journeyDest.lon));
-                if (Math.abs(rel) > AR_HALF_FOV + 8) de.style.display = 'none';
-                else { de.style.display = 'flex'; de.style.left = Math.max(6, Math.min(94, 50 + (rel / AR_HALF_FOV) * 50)) + '%'; de.style.top = '30%'; de.style.zIndex = '1500'; }
+                if (Math.abs(rel) > AR_HALF_FOV + 6) de.style.display = 'none';
+                else { de.style.display = 'flex'; de.style.left = Math.max(7, Math.min(93, 50 + (rel / AR_HALF_FOV) * 50)) + '%'; de.style.top = '18%'; de.style.zIndex = '2500'; }
             } else if (de) de.style.display = 'none';
 
             updateArGuide();
