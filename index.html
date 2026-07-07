@@ -455,7 +455,7 @@
     <header class="topbar">
         <div>
             <h1>🚍 Transport BCN</h1>
-            <div class="subtitle">Bus · Metro · Tram</div>
+            <div class="subtitle">Bus · Metro · Tram · Rodalies</div>
         </div>
         <div class="live-badge">En directo</div>
     </header>
@@ -609,6 +609,11 @@
         // no depende del proxy): { línea: [[nombre, lat, lon], ...] }
         const TRAM_LINES = {"1":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["El Pedró",41.36532,2.07667],["Ignasi Iglésias",41.36124,2.07267],["Cornellà Centre",41.35744,2.06992],["Les Aigües",41.35667,2.06607],["Fontsanta | Fatjó",41.36034,2.06222],["Bon Viatge",41.36461,2.05882]],"2":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["El Pedró",41.36532,2.07667],["Ignasi Iglésias",41.36124,2.07267],["Cornellà Centre",41.35744,2.06992],["Les Aigües",41.35667,2.06607],["Fontsanta | Fatjó",41.36034,2.06222],["Bon Viatge",41.36461,2.05882],["La Fontsanta",41.36779,2.06295],["Centre Miquel Martí i Pol",41.36866,2.0712],["Llevant - Les planes",41.37087,2.07612]],"3":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["Hospital Sant Joan Despí | TV3",41.37239,2.07568],["Rambla de Sant Just",41.37883,2.07505],["Walden",41.37972,2.0669],["Torreblanca",41.37976,2.06082],["Sant Feliu | Consell Comarcal",41.37936,2.05337]],"4":[["Verdaguer",41.39843,2.16743],["Sicília",41.40015,2.17429],["Monumental",41.4019,2.18117],["Glòries",41.40168,2.1869],["Ca l'Aranyó",41.40445,2.1915],["Pere IV",41.40614,2.19825],["Fluvià",41.40782,2.20491],["Selva de Mar",41.40919,2.21045],["El Maresme",41.41049,2.21563],["Fòrum",41.41183,2.21985],["Campus Diagonal - Besòs",41.41525,2.22293],["Port Fòrum",41.41887,2.22616],["Estació de Sant Adrià",41.42395,2.23055]],"5":[["Ciutadella | Vila Olímpica",41.38762,2.19192],["Wellington | UPF",41.39017,2.18848],["Marina",41.39406,2.18692],["Auditori | Teatre Nacional",41.39754,2.18689],["Glòries",41.40168,2.1869],["Can Jaumandreu",41.40811,2.1936],["Espronceda",41.41136,2.19794],["Sant Martí de Provençals",41.41647,2.20474],["Besòs",41.42007,2.20956],["Alfons el Magnànim",41.41719,2.21357],["Parc del Besòs",41.41943,2.21763],["La Catalana",41.42265,2.22195],["Sant Joan Baptista",41.42739,2.2254],["Encants de Sant Adrià",41.43024,2.22261],["Sant Roc",41.43494,2.2276],["Gorg",41.43997,2.23322]],"6":[["Ciutadella | Vila Olímpica",41.38762,2.19192],["Wellington | UPF",41.39017,2.18848],["Marina",41.39406,2.18692],["Auditori | Teatre Nacional",41.39754,2.18689],["Glòries",41.40168,2.1869],["Can Jaumandreu",41.40811,2.1936],["Espronceda",41.41136,2.19794],["Sant Martí de Provençals",41.41647,2.20474],["Besòs",41.42007,2.20956],["Alfons el Magnànim",41.41719,2.21357],["Parc del Besòs",41.41943,2.21763],["La Mina",41.41838,2.221],["Port Fòrum",41.41887,2.22616],["Estació de Sant Adrià",41.42395,2.23055]]};
 
+        // Estaciones de Rodalies/Renfe (Cercanías + regionales-MD) del área de Barcelona,
+        // extraídas del GTFS oficial de Renfe: [código, nombre, lat, lon, [[línea, códTerminal, nombreTerminal],...]]
+        const RENFE_STATIONS = [["71601","Calafell",41.18967,1.57501,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71602","Segur De Calafell",41.19258,1.60644,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71603","Cunit",41.19504,1.63194,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71604","Cubelles",41.20432,1.67598,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71700","Vilanova I La Geltrú",41.22032,1.73077,[["R2S","79400","Barcelona Estació De França"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R16","65400","Tortosa"],["R16","79400","Barcelona Estació De França"],["R17","79400","Barcelona Estació De França"],["R17","65411","Salou-Port Aventura"],["R15","79400","Barcelona Estació De França"],["R15","71400","Reus"]]],["71701","Sitges",41.23913,1.80969,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71703","Garraf",41.25459,1.9025,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71704","Platja De Castelldefels",41.26698,1.95714,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71705","Castelldefels",41.27905,1.97915,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","79100","Granollers Centre"]]],["71706","Gavà",41.30347,2.01053,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71707","El Prat De Llobregat",41.33094,2.08934,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71708","Bellvitge ¨ Gornal",41.35492,2.11527,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71709","Viladecans",41.30951,2.02742,[["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["71801","Barcelona-Sants",41.37986,2.14102,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R11","79315","Portbou"],["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"],["R16","65400","Tortosa"],["R16","79400","Barcelona Estació De França"],["R17","79400","Barcelona Estació De França"],["R17","65411","Salou-Port Aventura"],["R14","78400","Lleida-Pirineus"],["R14","79400","Barcelona Estació De França"],["R13","78400","Lleida-Pirineus"],["R13","79400","Barcelona Estació De França"],["R15","79400","Barcelona Estació De França"],["R15","71400","Reus"]]],["71802","Barcelona-Passeig De Gràcia",41.39209,2.16534,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2S","79400","Barcelona Estació De França"],["R2S","71700","Vilanova I La Geltrú"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R11","71801","Barcelona-Sants"],["R11","79315","Portbou"],["R16","65400","Tortosa"],["R16","79400","Barcelona Estació De França"],["R17","79400","Barcelona Estació De França"],["R17","65411","Salou-Port Aventura"],["R14","78400","Lleida-Pirineus"],["R14","79400","Barcelona Estació De França"],["R13","78400","Lleida-Pirineus"],["R13","79400","Barcelona Estació De França"],["R15","79400","Barcelona Estació De França"],["R15","71400","Reus"]]],["72202","L'Arboç",41.2734,1.60052,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72203","Els Monjos",41.31471,1.65988,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72204","Vilafranca Del Penedès",41.34481,1.7032,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72205","La Granada",41.37095,1.72508,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72206","Lavern-Subirats",41.39573,1.76817,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72207","Sant Sadurní D'Anoia",41.42052,1.79469,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72208","Gelida",41.44854,1.86553,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72209","Martorell Central",41.47929,1.92533,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"],["R8","79100","Granollers Centre"]]],["72210","Castellbisbal",41.47342,1.96757,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"],["R8","79100","Granollers Centre"],["R8","72209","Martorell Central"]]],["72211","El Papiol",41.43537,2.00258,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72300","Molins De Rei",41.4099,2.02077,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72301","Sant Feliu De Llobregat",41.383,2.04792,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72302","Sant Joan Despí",41.36858,2.06021,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72303","Cornellà",41.35752,2.07055,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72305","L'Hospitalet De Llobregat",41.3642,2.10092,[["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["72400","El Prat Aeroport",41.30418,2.0734,[["R2N","79104","Sant Celoni"]]],["72501","Rubí Can Vallhonrat",41.47518,2.03708,[["R8","79100","Granollers Centre"],["R8","72209","Martorell Central"]]],["72502","Sant Cugat Coll Favà",41.48109,2.07968,[["R8","79100","Granollers Centre"],["R8","72209","Martorell Central"]]],["72503","Cerdanyola Universitat",41.49699,2.11538,[["R8","79100","Granollers Centre"],["R8","72209","Martorell Central"]]],["72508","Santa Perpètua De Mogoda Riera De Caldes",41.52623,2.18634,[["R8","79100","Granollers Centre"],["R8","72209","Martorell Central"]]],["77002","Montcada-Ripollet",41.4968,2.18193,[["R3","77109","Vic"],["R3","77102","La Garriga"]]],["77003","Santa Perpètua De Mogoda La Florida",41.5262,2.18623,[["R3","77109","Vic"],["R3","77102","La Garriga"]]],["77004","Mollet-Santa Rosa",41.53666,2.20617,[["R3","77109","Vic"],["R3","77102","La Garriga"]]],["77005","Parets Del Vallès",41.55627,2.226,[["R3","77109","Vic"],["R3","77102","La Garriga"]]],["77006","Granollers-Canovelles",41.61146,2.27686,[["R3","77109","Vic"],["R3","77102","La Garriga"]]],["77100","Les Franqueses Del Vallès",41.62979,2.29516,[["R3","77109","Vic"],["R3","77102","La Garriga"]]],["77102","La Garriga",41.68463,2.2888,[["R3","77109","Vic"]]],["77103","Figaró",41.72135,2.2716,[["R3","77109","Vic"],["R3","77102","La Garriga"]]],["78504","Seguers-Sant Pere Sallavinera",41.74799,1.57417,[["RL4","78400","Lleida-Pirineus"],["RL4","78506","Rajadell"]]],["78505","Aguilar De Segarra",41.73892,1.62372,[["RL4","78400","Lleida-Pirineus"],["RL4","78506","Rajadell"]]],["78506","Rajadell",41.73316,1.69627,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"],["RL4","78400","Lleida-Pirineus"]]],["78600","Manresa",41.72039,1.82649,[["R4","78700","Terrassa Estació Del Nord"],["RL4","78400","Lleida-Pirineus"],["RL4","78506","Rajadell"]]],["78604","Sant Vicenç De Castellet",41.66883,1.86264,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78605","Castellbell I El Vilar-Monist Montserrat",41.62868,1.86882,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78606","Vacarisses",41.60193,1.89409,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78607","Vacarisses-Torreblanca",41.58692,1.91648,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78609","Viladecavalls",41.5638,1.95727,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78610","Sant Miquel De Gonteres",41.56887,1.97428,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78700","Terrassa Estació Del Nord",41.56978,2.01435,[["R4","78600","Manresa"]]],["78703","Sabadell Sud",41.52871,2.10539,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78704","Sabadell Centre",41.54642,2.11561,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78705","Barberà Del Vallès",41.51366,2.11845,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78706","Cerdanyola Del Vallès",41.49256,2.14752,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78707","Montcada I Reixac-Santa Maria",41.48114,2.16699,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78708","Montcada I Reixac-Manresa",41.48394,2.1854,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78709","Sabadell Nord",41.56198,2.09623,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78710","Terrassa Est",41.56753,2.03964,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78800","Montcada-Bifurcació",41.46984,2.18002,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78801","Barcelona Torre Baró ¨Vallbona",41.46097,2.18102,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78802","Barcelona Fabra I Puig",41.43035,2.18333,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"],["R3","77109","Vic"],["R3","77102","La Garriga"]]],["78804","Barcelona Arc De Triomf",41.3919,2.18064,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78805","Barcelona Plaça De Catalunya",41.38792,2.1697,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["78806","Barcelona La Sagrera-Meridiana",41.42185,2.18711,[["R4","78700","Terrassa Estació Del Nord"],["R4","78600","Manresa"]]],["79004","Barcelona Sant Andreu",41.43613,2.1932,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R11","71801","Barcelona-Sants"],["R11","79315","Portbou"]]],["79005","Montcada I Reixac",41.48423,2.18809,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["79006","Mollet-Sant Fost",41.53356,2.21767,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R8","79100","Granollers Centre"],["R8","72209","Martorell Central"]]],["79007","Montmeló",41.54965,2.24544,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R8","79100","Granollers Centre"],["R8","72209","Martorell Central"]]],["79009","Barcelona El Clot",41.4093,2.1872,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R11","71801","Barcelona-Sants"],["R11","79315","Portbou"]]],["79011","La Llagosta",41.51046,2.19973,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["79100","Granollers Centre",41.59974,2.29127,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R11","71801","Barcelona-Sants"],["R11","79315","Portbou"],["R8","72209","Martorell Central"]]],["79101","Cardedeu",41.6367,2.35626,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["79102","Llinars Del Vallès",41.63804,2.40446,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["79103","Palautordera",41.67195,2.45421,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["79104","Sant Celoni",41.68579,2.49073,[["R2N","72400","El Prat Aeroport"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R11","71801","Barcelona-Sants"],["R11","79315","Portbou"]]],["79105","Gualba",41.71819,2.53878,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"],["R11","71801","Barcelona-Sants"],["R11","79315","Portbou"]]],["79109","Les Franqueses-Granollers Nord",41.61725,2.29443,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2","71705","Castelldefels"],["R2","79100","Granollers Centre"]]],["79400","Barcelona Estació De França",41.38449,2.18535,[["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"],["R2S","71700","Vilanova I La Geltrú"],["R16","65400","Tortosa"],["R17","65411","Salou-Port Aventura"],["R14","78400","Lleida-Pirineus"],["R13","78400","Lleida-Pirineus"],["R15","71400","Reus"]]],["79403","Sant Adrià De Besòs",41.42443,2.23048,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79404","Badalona",41.44588,2.24892,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79405","Montgat",41.46302,2.27216,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79406","Montgat-Nord",41.46879,2.2867,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79407","El Masnou",41.47704,2.31038,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79408","Ocata",41.47902,2.31953,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79409","Premià De Mar",41.48775,2.35486,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79410","Vilassar De Mar",41.50063,2.38986,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79412","Cabrera De Mar-Vilassar De Mar",41.50677,2.40162,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79500","Mataró",41.53339,2.44553,[["R1","72305","L'Hospitalet De Llobregat"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79501","Sant Andreu De Llavaneres",41.55555,2.49826,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79502","Caldes D'Estrac",41.56861,2.52598,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]],["79600","Arenys De Mar",41.5777,2.54934,[["R1","72305","L'Hospitalet De Llobregat"],["R1","79500","Mataró"],["R2N","72400","El Prat Aeroport"],["R2N","79104","Sant Celoni"]]]];
+        const RENFE_COLORS = {"R1":"7DBCEC","R2N":"D0DF00","R2S":"146520","R2":"26A741","R11":"0069AA","R4":"F7A30D","R3":"E54A3C","RG1":"409EF5","R16":"B52B46","RT2":"F965DE","RT1":"39D4CC","R17":"F3B12E","R14":"6C60A8","R13":"146520","R15":"978571","R8":"88016A","RL3":"B6AE33","RL4":"F7A30D"};
+
         let map, markersLayer, userMarkerLayer, routeLayer, tileLayer;
         let userPos = null;              // última posición GPS conocida
         let countdownInterval = null;
@@ -620,8 +625,9 @@
         let activeRouteHTML = "";
         let fetchSeq = 0;                // descarta respuestas obsoletas
 
-        const MODE_ICON = { bus: '🚌', metro: 'Ⓜ️', tram: '🚊' };
-        const MODE_NAME = { bus: 'Bus', metro: 'Metro', tram: 'Tram' };
+        const MODE_ICON = { bus: '🚌', metro: 'Ⓜ️', tram: '🚊', train: '🚆' };
+        const MODE_NAME = { bus: 'Bus', metro: 'Metro', tram: 'Tram', train: 'Rodalies · Renfe' };
+        const renfeColor = line => '#' + (RENFE_COLORS[line] || 'EC0000');
 
         // Colores oficiales TMB por familia de línea de bus
         function busColor(line) {
@@ -678,7 +684,10 @@
         // de un vistazo: Ⓜ cuadrado rojo, Ⓣ cuadrado verde, bus redondo rojo
         function stopPinIcon(type, selected) {
             let badge;
-            if (type === 'metro') {
+            if (type === 'train') {
+                badge = `<rect x="3" y="3" width="32" height="32" rx="8" fill="#e8500f" stroke="#fff" stroke-width="3"/>
+                         <text x="19" y="27" font-size="22" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial, sans-serif">R</text>`;
+            } else if (type === 'metro') {
                 badge = `<rect x="3" y="3" width="32" height="32" rx="8" fill="#e1051e" stroke="#fff" stroke-width="3"/>
                          <text x="19" y="27" font-size="22" font-weight="900" fill="#fff" text-anchor="middle" font-family="Arial, sans-serif">M</text>`;
             } else if (type === 'tram') {
@@ -725,6 +734,7 @@
                 if (parts[0] === 'bus' && parts[1]) return { type: 'bus', code: parts[1], name: parts.slice(2).join(':') || `Parada ${parts[1]}` };
                 if (parts[0] === 'metro' && parts[1]) return { type: 'metro', id: parseInt(parts[1], 10), name: parts.slice(2).join(':') || 'Estación' };
                 if (parts[0] === 'tram' && parts[1] && parts[2]) return { type: 'tram', out: parseInt(parts[1], 10), ret: parseInt(parts[2], 10), name: parts.slice(3).join(':') || 'Parada TRAM' };
+                if (parts[0] === 'train' && parts[1]) return renfeStation(parts[1]) || { type: 'train', code: parts[1], name: parts.slice(2).join(':') || 'Estación' };
             } catch {}
             return null;
         }
@@ -784,7 +794,13 @@
         const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
         // Identificador único de una parada (para chips, marcadores y favoritos)
-        const stopKey = s => `${s.type}:${s.type === 'bus' ? s.code : (s.type === 'metro' ? s.id : s.out)}`;
+        const stopKey = s => `${s.type}:${s.type === 'bus' || s.type === 'train' ? s.code : (s.type === 'metro' ? s.id : s.out)}`;
+
+        // Recupera los datos completos de una estación de Renfe por código
+        function renfeStation(code) {
+            const s = RENFE_STATIONS.find(x => x[0] == code);
+            return s ? { type: 'train', code: s[0], name: s[1], lat: s[2], lon: s[3], dirs: s[4] } : null;
+        }
 
         // --- 6. AUTO-REFRESCO ---
         function startCountdown() {
@@ -932,6 +948,7 @@
                 let departures;
                 if (stop.type === 'bus') departures = await fetchBusArrivals(stop);
                 else if (stop.type === 'metro') departures = await fetchMetroArrivals(stop);
+                else if (stop.type === 'train') departures = await fetchTrainArrivals(stop);
                 else departures = await fetchTramArrivals(stop);
 
                 if (seq !== fetchSeq) return; // llegó tarde: el usuario ya pidió otra parada
@@ -957,8 +974,12 @@
         function renderStopCard(stop) {
             document.getElementById('stopCard').style.display = 'block';
             document.getElementById('stopName').innerText = stop.name || `Parada ${stop.code || ''}`;
+            const trainLines = stop.type === 'train'
+                ? [...new Set(((stop.dirs || (renfeStation(stop.code) || {}).dirs) || []).map(d => d[0]))].join(' · ')
+                : '';
             const sub = stop.type === 'bus' ? `${MODE_ICON.bus} Bus · Parada ${stop.code}`
                       : stop.type === 'metro' ? `${MODE_ICON.metro} Metro${stop.lines ? ' · ' + stop.lines : ''}`
+                      : stop.type === 'train' ? `${MODE_ICON.train} Rodalies · Renfe${trainLines ? ' · ' + trainLines : ''}`
                       : `${MODE_ICON.tram} Tram`;
             document.getElementById('stopCodeLabel').innerText = sub;
             const walkEl = document.getElementById('walkHint');
@@ -976,6 +997,7 @@
             const base = location.origin + location.pathname;
             const p = stop.type === 'bus' ? `bus:${stop.code}:${stop.name || ''}`
                     : stop.type === 'metro' ? `metro:${stop.id}:${stop.name || ''}`
+                    : stop.type === 'train' ? `train:${stop.code}:${stop.name || ''}`
                     : `tram:${stop.out}:${stop.ret}:${stop.name || ''}`;
             return `${base}#p=${encodeURIComponent(p)}`;
         }
@@ -1069,7 +1091,7 @@
                                 ${d.occ ? `<div class="occ-badge ${d.occ.high ? 'occ-high' : ''}">👥 ${esc(d.occ.label)}</div>` : ''}
                             </div>
                             <div class="bus-eta">${etaHTML(d.arriveAt)}${tight ? '<span class="catch-warn" title="Justo de tiempo llegando andando">🏃</span>' : ''}</div>
-                            <div class="bus-chevron">▼</div>
+                            ${d.itin ? '<div class="bus-chevron">▼</div>' : ''}
                         </div>
                         <div class="bus-itinerary" style="display:${isExpanded ? 'block' : 'none'}" onclick="event.stopPropagation()">
                             ${isExpanded ? activeRouteHTML : ''}
@@ -1169,10 +1191,97 @@
             });
         }
 
+        // --- 10B. RODALIES / RENFE (HorariosServlet oficial, con tiempo real) ---
+        const renfeCache = new Map(); // clave petición -> { t, data } (45 s)
+
+        async function fetchRenfeOD(origen, destino) {
+            const key = origen + '>' + destino;
+            const hit = renfeCache.get(key);
+            if (hit && Date.now() - hit.t < 45000) return hit.data;
+            const now = new Date();
+            const body = JSON.stringify({
+                nucleo: "50", origen: String(origen), destino: String(destino),
+                fchaViaje: now.toISOString().slice(0, 10).replace(/-/g, ''),
+                validaReglaNegocio: true, tiempoReal: true, servicioHorarios: "VTI",
+                horaViajeOrigen: String(now.getHours()).padStart(2, '0'), horaViajeLlegada: "26",
+                accesibilidadTrenes: false
+            });
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 10000);
+            try {
+                const res = await fetch('https://corsproxy.io/?url=' + encodeURIComponent('https://horarios.renfe.com/cer/HorariosServlet'), {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ctrl.signal
+                });
+                if (!res.ok) throw new Error('renfe');
+                const data = await res.json();
+                renfeCache.set(key, { t: Date.now(), data });
+                return data;
+            } finally { clearTimeout(timer); }
+        }
+
+        // Convierte "HH:MM" (hoy) a epoch ms; los horarios de madrugada pasan a mañana
+        function renfeTimeToEpoch(hhmm) {
+            if (!hhmm) return null;
+            const [h, m] = hhmm.split(':').map(Number);
+            const d = new Date();
+            d.setHours(h, m, 0, 0);
+            if (d.getTime() < Date.now() - 20 * 60000) d.setDate(d.getDate() + 1);
+            return d.getTime();
+        }
+
+        async function fetchTrainArrivals(stop) {
+            const dirs = stop.dirs || (renfeStation(stop.code) || {}).dirs || [];
+            if (dirs.length === 0) throw new Error('No hay datos de líneas para esta estación.');
+
+            // una consulta por dirección (terminal), en tandas de 4 para no saturar el proxy
+            const targets = [...new Map(dirs.map(d => [d[1], d])).values()];
+            const results = [];
+            for (let i = 0; i < targets.length; i += 4) {
+                const chunk = targets.slice(i, i + 4);
+                const settled = await Promise.allSettled(chunk.map(d => fetchRenfeOD(stop.code, d[1])));
+                settled.forEach((s, j) => { if (s.status === 'fulfilled') results.push({ dir: chunk[j], data: s.value }); });
+            }
+            if (results.length === 0) throw new Error('El servicio de Renfe no responde ahora mismo. Vuelve a intentarlo.');
+
+            // agrupa por línea + dirección, quedándose con los 2 próximos trenes
+            const groups = new Map();
+            const seenTrains = new Set();
+            const now = Date.now();
+            results.forEach(({ dir, data }) => {
+                ((data && data.horario) || []).forEach(t => {
+                    const dep = renfeTimeToEpoch(t.horaSalidaReal || t.horaSalida);
+                    if (!dep || dep < now - 60000 || dep > now + 3 * 3600000) return;
+                    const trainKey = t.cdgoTren + '@' + t.horaSalida;
+                    if (seenTrains.has(trainKey)) return;
+                    seenTrains.add(trainKey);
+                    const sched = renfeTimeToEpoch(t.horaSalida);
+                    const delayMin = (t.horaSalidaReal && sched) ? Math.round((dep - sched) / 60000) : 0;
+                    const k = (t.linea || dir[0]) + '|' + dir[2];
+                    (groups.get(k) || groups.set(k, []).get(k)).push({ dep, delayMin, real: !!t.horaSalidaReal, line: t.linea || dir[0], destName: dir[2] });
+                });
+            });
+
+            const departures = [];
+            groups.forEach(items => {
+                items.sort((a, b) => a.dep - b.dep);
+                const f = items[0];
+                departures.push({
+                    line: f.line, color: renfeColor(f.line), dest: f.destName,
+                    mins: Math.max(0, Math.round((f.dep - now) / 60000)),
+                    arriveAt: f.dep,
+                    next: items[1] ? `Siguiente: ${fmtTime(items[1].dep)}` : null,
+                    occ: f.delayMin >= 2 ? { label: `Retraso +${f.delayMin} min`, high: true }
+                        : (f.real ? { label: 'En hora ✓', high: false } : null),
+                    itinKey: null, itin: null
+                });
+            });
+            return departures;
+        }
+
         // --- 11. ITINERARIOS DESPLEGABLES ---
         async function toggleItinerary(index, cardElement) {
             const d = (window._departures || [])[index];
-            if (!d) return;
+            if (!d || !d.itin) return;
             const itineraryDiv = cardElement.querySelector('.bus-itinerary');
 
             if (itineraryDiv.style.display === 'block') {
@@ -1637,8 +1746,11 @@
             const tramStops = TRAM_STOPS
                 .map(([name, slat, slon, out, ret]) => ({ type: 'tram', name, out, ret, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }))
                 .filter(s => s.dist <= 800);
+            const trainStops = RENFE_STATIONS
+                .map(([code, sname, slat, slon, dirs]) => ({ type: 'train', code, name: sname, dirs, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }))
+                .filter(s => s.dist <= 1000);
 
-            nearbyStops = [...busStops, ...metroStops, ...tramStops]
+            nearbyStops = [...busStops, ...metroStops, ...tramStops, ...trainStops]
                 .map(s => ({ ...s, walkable }))
                 .sort((a, b) => a.dist - b.dist)
                 .slice(0, 15);
@@ -1672,6 +1784,7 @@
             let found = false;
             for (let i = 0; i < Math.min(nearbyStops.length, 3); i++) {
                 const stop = nearbyStops[i];
+                if (stop.type === 'train') continue; // el panel de tren es más pesado: solo bajo demanda
                 if (stop.type === 'tram') { fetchArrivals(stop); found = true; break; }
                 try {
                     const url = stop.type === 'bus'
