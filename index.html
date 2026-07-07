@@ -8,7 +8,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Consulta en tiempo real los próximos buses, metros y trams de la parada más cercana a tu ubicación en Barcelona.">
     <title>Transport BCN</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚍</text></svg>">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="manifest" href="manifest.webmanifest">
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -237,6 +239,29 @@
         .empty-state { text-align: center; padding: 28px 16px; color: var(--text-faint); font-weight: 600; }
         .empty-state .big { font-size: 2.2rem; margin-bottom: 8px; }
 
+        /* ---------- EXTRAS ---------- */
+        .map-hint { text-align: center; font-size: .72rem; color: var(--text-faint); font-weight: 600; margin: 6px 0 0; }
+        .stop-actions { display: flex; gap: 2px; }
+        .share-btn { background: none; border: none; font-size: 1.25rem; cursor: pointer; padding: 4px; color: var(--text-soft); line-height: 1; transition: transform .15s; }
+        .share-btn:active { transform: scale(1.2); }
+        .walk-hint { font-size: .78rem; color: var(--text-soft); font-weight: 600; margin-top: 3px; }
+        .occ-badge {
+            display: inline-flex; align-items: center; gap: 4px; font-size: .68rem; font-weight: 700;
+            border-radius: 6px; padding: 2px 7px; margin-top: 3px;
+            background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text-soft);
+        }
+        .occ-badge.occ-high { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
+        .catch-warn { font-size: .95rem; margin-left: 5px; }
+        .explore-pop { text-align: center; }
+        .explore-pop button { margin-top: 6px; }
+        .toast {
+            position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(80px);
+            background: var(--text); color: var(--bg); font-weight: 700; font-size: .88rem;
+            padding: 12px 20px; border-radius: 999px; box-shadow: var(--shadow-lg);
+            z-index: 3000; transition: transform .3s ease; pointer-events: none;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+
         footer { text-align: center; font-size: .72rem; color: var(--text-faint); padding: 26px 0 10px; }
     </style>
 </head>
@@ -260,6 +285,7 @@
             <div id="map"></div>
             <button class="map-fab" onclick="searchGPS()" title="Buscar transporte cerca de mí" aria-label="Buscar transporte cerca de mí">📍</button>
         </div>
+        <div class="map-hint">💡 Mantén pulsado cualquier punto del mapa para explorar esa zona</div>
 
         <div class="controls">
             <input type="number" id="stopCode" placeholder="Nº parada de bus" inputmode="numeric" onkeydown="if(event.key==='Enter')searchManual()">
@@ -270,6 +296,11 @@
         <div id="favSection" style="display:none">
             <div class="chips-label">⭐ Favoritas</div>
             <div id="favChips" class="chips-row"></div>
+        </div>
+
+        <div id="recentSection" style="display:none">
+            <div class="chips-label">🕐 Recientes</div>
+            <div id="recentChips" class="chips-row"></div>
         </div>
 
         <div id="nearbySection" style="display:none">
@@ -285,8 +316,12 @@
                 <div class="stop-card-info">
                     <div class="stop-name" id="stopName"></div>
                     <div class="stop-code" id="stopCodeLabel"></div>
+                    <div class="walk-hint" id="walkHint" style="display:none"></div>
                 </div>
-                <button class="fav-btn" id="favBtn" onclick="toggleFav()" title="Guardar en favoritas" aria-label="Guardar en favoritas">★</button>
+                <div class="stop-actions">
+                    <button class="share-btn" onclick="shareStop()" title="Compartir parada" aria-label="Compartir parada">📤</button>
+                    <button class="fav-btn" id="favBtn" onclick="toggleFav()" title="Guardar en favoritas" aria-label="Guardar en favoritas">★</button>
+                </div>
             </div>
             <div class="refresh-row">
                 <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
@@ -337,6 +372,7 @@
         const TRAM_LINES = {"1":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["El Pedró",41.36532,2.07667],["Ignasi Iglésias",41.36124,2.07267],["Cornellà Centre",41.35744,2.06992],["Les Aigües",41.35667,2.06607],["Fontsanta | Fatjó",41.36034,2.06222],["Bon Viatge",41.36461,2.05882]],"2":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["El Pedró",41.36532,2.07667],["Ignasi Iglésias",41.36124,2.07267],["Cornellà Centre",41.35744,2.06992],["Les Aigües",41.35667,2.06607],["Fontsanta | Fatjó",41.36034,2.06222],["Bon Viatge",41.36461,2.05882],["La Fontsanta",41.36779,2.06295],["Centre Miquel Martí i Pol",41.36866,2.0712],["Llevant - Les planes",41.37087,2.07612]],"3":[["Francesc Macià",41.3922,2.14317],["L'Illa",41.39056,2.1365],["Numància",41.38934,2.13195],["Maria Cristina",41.38797,2.12651],["Pius XII",41.38672,2.1216],["Palau Reial",41.38592,2.11846],["Zona Universitària",41.38427,2.11444],["Avinguda de Xile",41.38074,2.11484],["Ernest Lluch",41.37648,2.11079],["Can Rigal",41.37612,2.10593],["Ca n'Oliveres",41.37661,2.09841],["Can Clota",41.37696,2.09352],["Pont d'Esplugues",41.37683,2.08861],["La Sardana",41.37279,2.084],["Montesa",41.36956,2.08093],["Hospital Sant Joan Despí | TV3",41.37239,2.07568],["Rambla de Sant Just",41.37883,2.07505],["Walden",41.37972,2.0669],["Torreblanca",41.37976,2.06082],["Sant Feliu | Consell Comarcal",41.37936,2.05337]],"4":[["Verdaguer",41.39843,2.16743],["Sicília",41.40015,2.17429],["Monumental",41.4019,2.18117],["Glòries",41.40168,2.1869],["Ca l'Aranyó",41.40445,2.1915],["Pere IV",41.40614,2.19825],["Fluvià",41.40782,2.20491],["Selva de Mar",41.40919,2.21045],["El Maresme",41.41049,2.21563],["Fòrum",41.41183,2.21985],["Campus Diagonal - Besòs",41.41525,2.22293],["Port Fòrum",41.41887,2.22616],["Estació de Sant Adrià",41.42395,2.23055]],"5":[["Ciutadella | Vila Olímpica",41.38762,2.19192],["Wellington | UPF",41.39017,2.18848],["Marina",41.39406,2.18692],["Auditori | Teatre Nacional",41.39754,2.18689],["Glòries",41.40168,2.1869],["Can Jaumandreu",41.40811,2.1936],["Espronceda",41.41136,2.19794],["Sant Martí de Provençals",41.41647,2.20474],["Besòs",41.42007,2.20956],["Alfons el Magnànim",41.41719,2.21357],["Parc del Besòs",41.41943,2.21763],["La Catalana",41.42265,2.22195],["Sant Joan Baptista",41.42739,2.2254],["Encants de Sant Adrià",41.43024,2.22261],["Sant Roc",41.43494,2.2276],["Gorg",41.43997,2.23322]],"6":[["Ciutadella | Vila Olímpica",41.38762,2.19192],["Wellington | UPF",41.39017,2.18848],["Marina",41.39406,2.18692],["Auditori | Teatre Nacional",41.39754,2.18689],["Glòries",41.40168,2.1869],["Can Jaumandreu",41.40811,2.1936],["Espronceda",41.41136,2.19794],["Sant Martí de Provençals",41.41647,2.20474],["Besòs",41.42007,2.20956],["Alfons el Magnànim",41.41719,2.21357],["Parc del Besòs",41.41943,2.21763],["La Mina",41.41838,2.221],["Port Fòrum",41.41887,2.22616],["Estació de Sant Adrià",41.42395,2.23055]]};
 
         let map, markersLayer, userMarkerLayer, routeLayer, tileLayer;
+        let userPos = null;              // última posición GPS conocida
         let countdownInterval = null;
         let secondsLeft = REFRESH_SECONDS;
         let currentStop = null;          // { type:'bus'|'metro'|'tram', name, ... }
@@ -385,6 +421,17 @@
             userMarkerLayer = L.layerGroup().addTo(map);
             routeLayer = L.featureGroup().addTo(map);
             darkScheme.addEventListener('change', () => tileLayer.setUrl(tileURL()));
+
+            // Mantener pulsado (o clic derecho) en el mapa = explorar esa zona
+            map.on('contextmenu', e => {
+                const { lat, lng } = e.latlng;
+                L.popup({ closeButton: false })
+                    .setLatLng(e.latlng)
+                    .setContent(`<div class="explore-pop"><b>¿Explorar esta zona?</b><br>
+                        <button class="btn btn-search" style="padding:8px 14px; font-size:.85rem"
+                            onclick="map.closePopup(); exploreAt(${lat.toFixed(6)}, ${lng.toFixed(6)}, false)">🔍 Ver transporte aquí</button></div>`)
+                    .openOn(map);
+            });
         }
 
         // Señales tipo cartel, una forma y color por modo para que se distingan
@@ -429,14 +476,37 @@
         });
 
         // --- 4. INICIO ---
+        // Enlace directo: #p=bus:1265:Nombre | metro:328:Diagonal | tram:2003:2103:Glòries
+        function parseDeepLink() {
+            const m = location.hash.match(/^#p=([^]+)/);
+            if (!m) return null;
+            try {
+                const parts = decodeURIComponent(m[1]).split(':');
+                if (parts[0] === 'bus' && parts[1]) return { type: 'bus', code: parts[1], name: parts.slice(2).join(':') || `Parada ${parts[1]}` };
+                if (parts[0] === 'metro' && parts[1]) return { type: 'metro', id: parseInt(parts[1], 10), name: parts.slice(2).join(':') || 'Estación' };
+                if (parts[0] === 'tram' && parts[1] && parts[2]) return { type: 'tram', out: parseInt(parts[1], 10), ret: parseInt(parts[2], 10), name: parts.slice(3).join(':') || 'Parada TRAM' };
+            } catch {}
+            return null;
+        }
+
         window.onload = () => {
             try {
                 initMap();
                 renderFavs();
-                searchGPS();
+                renderRecents();
+                const linked = parseDeepLink();
+                if (linked) {
+                    history.replaceState(null, '', location.pathname + location.search);
+                    fetchArrivals(linked);
+                } else {
+                    searchGPS();
+                }
             } catch (error) {
                 console.error("Error crítico al iniciar:", error);
                 showError("Error al cargar el mapa. Intenta refrescar la página.");
+            }
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js').catch(() => {});
             }
         };
 
@@ -553,6 +623,33 @@
             if (f) fetchArrivals(f);
         }
 
+        // --- RECIENTES (últimas 6 paradas consultadas, sin duplicar favoritas) ---
+        function getRecents() {
+            try { return JSON.parse(localStorage.getItem('busbcn_recents') || '[]'); } catch { return []; }
+        }
+        function pushRecent(stop) {
+            const { type, name, code, id, out, ret } = stop;
+            const entry = { type, name, code, id, out, ret };
+            let recents = getRecents().filter(r => stopKey(r) !== stopKey(entry));
+            recents.unshift(entry);
+            localStorage.setItem('busbcn_recents', JSON.stringify(recents.slice(0, 6)));
+            renderRecents();
+        }
+        function renderRecents() {
+            const recents = getRecents().filter(r => !isFav(r));
+            const section = document.getElementById('recentSection');
+            section.style.display = recents.length ? 'block' : 'none';
+            document.getElementById('recentChips').innerHTML = recents.map((r, i) => `
+                <div class="chip ${currentStop && stopKey(currentStop) === stopKey(r) ? 'active' : ''}" onclick="selectRecent(${i})">
+                    <span class="chip-mode">${MODE_ICON[r.type]}</span>
+                    <span class="chip-name">${esc(r.name)}</span>
+                </div>`).join('');
+        }
+        function selectRecent(i) {
+            const r = getRecents().filter(x => !isFav(x))[i];
+            if (r) fetchArrivals(r);
+        }
+
         // --- 8. PARADAS CERCANAS (chips + marcadores) ---
         function renderNearbyChips() {
             const section = document.getElementById('nearbySection');
@@ -601,7 +698,9 @@
 
                 renderStopCard(stop);
                 renderDepartures(departures, isSilent);
+                if (!isSilent) pushRecent(stop);
                 renderFavs();
+                renderRecents();
                 renderNearbyChips();
                 highlightMarkers();
                 startCountdown();
@@ -622,14 +721,84 @@
                       : stop.type === 'metro' ? `${MODE_ICON.metro} Metro${stop.lines ? ' · ' + stop.lines : ''}`
                       : `${MODE_ICON.tram} Tram`;
             document.getElementById('stopCodeLabel').innerText = sub;
+            const walkEl = document.getElementById('walkHint');
+            if (stop.dist && stop.walkable) {
+                walkEl.style.display = 'block';
+                walkEl.innerText = `🚶 a ${fmtDist(stop.dist)} · unos ${Math.max(1, Math.ceil(stop.dist / 75))} min andando`;
+            } else {
+                walkEl.style.display = 'none';
+            }
             updateFavBtn();
         }
 
+        // --- COMPARTIR PARADA ---
+        function stopLink(stop) {
+            const base = location.origin + location.pathname;
+            const p = stop.type === 'bus' ? `bus:${stop.code}:${stop.name || ''}`
+                    : stop.type === 'metro' ? `metro:${stop.id}:${stop.name || ''}`
+                    : `tram:${stop.out}:${stop.ret}:${stop.name || ''}`;
+            return `${base}#p=${encodeURIComponent(p)}`;
+        }
+        function showToast(msg) {
+            let t = document.querySelector('.toast');
+            if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+            t.innerText = msg;
+            requestAnimationFrame(() => t.classList.add('show'));
+            clearTimeout(t._timer);
+            t._timer = setTimeout(() => t.classList.remove('show'), 2500);
+        }
+        async function shareStop() {
+            if (!currentStop) return;
+            const url = stopLink(currentStop);
+            const title = `${MODE_NAME[currentStop.type]} · ${currentStop.name}`;
+            try {
+                if (navigator.share) { await navigator.share({ title, text: `Tiempos en directo de ${title}`, url }); return; }
+            } catch (e) { return; /* usuario canceló el diálogo */ }
+            try {
+                await navigator.clipboard.writeText(url);
+                showToast('🔗 Enlace copiado');
+            } catch (e) {
+                // último recurso: textarea temporal + execCommand
+                const ta = document.createElement('textarea');
+                ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.select();
+                const ok = document.execCommand('copy');
+                ta.remove();
+                showToast(ok ? '🔗 Enlace copiado' : url);
+            }
+        }
+
         // Modelo unificado de salida:
-        // { line, color, dest, mins, next (texto opcional), itin (datos para el desplegable) }
-        function etaHTML(mins) {
-            if (mins <= 0) return `<div class="bus-time now">Llegando</div>`;
-            return `<div class="bus-time ${mins <= 3 ? 'soon' : ''}">${mins}<small>min</small></div>`;
+        // { line, color, dest, mins, arriveAt (epoch ms), next, occ, itin }
+        function etaHTML(arriveAt) {
+            const secs = Math.round((arriveAt - Date.now()) / 1000);
+            if (secs <= 30) return `<div class="bus-time now" data-arrive="${arriveAt}">Llegando</div>`;
+            const mins = Math.ceil(secs / 60);
+            return `<div class="bus-time ${mins <= 3 ? 'soon' : ''}" data-arrive="${arriveAt}">${mins}<small>min</small></div>`;
+        }
+
+        // Cuenta atrás en vivo: entre refresco y refresco, los tiempos avanzan solos
+        setInterval(() => {
+            document.querySelectorAll('.bus-time[data-arrive]').forEach(el => {
+                const arriveAt = parseInt(el.dataset.arrive, 10);
+                const secs = Math.round((arriveAt - Date.now()) / 1000);
+                if (secs <= 30) {
+                    if (!el.classList.contains('now')) { el.className = 'bus-time now'; el.innerText = 'Llegando'; }
+                } else {
+                    const mins = Math.ceil(secs / 60);
+                    const txt = `${mins}<small>min</small>`;
+                    if (el.innerHTML !== txt) {
+                        el.className = 'bus-time' + (mins <= 3 ? ' soon' : '');
+                        el.innerHTML = txt;
+                    }
+                }
+                el.dataset.arrive = arriveAt;
+            });
+        }, 1000);
+
+        // ¿Da tiempo a llegar andando? (≈1,25 m/s) — solo si la distancia es desde tu posición real
+        function walkSeconds() {
+            return (currentStop && currentStop.walkable && currentStop.dist) ? currentStop.dist / 1.25 : null;
         }
 
         function renderDepartures(departures, isSilent) {
@@ -642,11 +811,13 @@
                 return;
             }
 
-            departures.sort((a, b) => a.mins - b.mins);
+            departures.sort((a, b) => a.arriveAt - b.arriveAt);
             window._departures = departures; // referencia para los desplegables
+            const wSecs = walkSeconds();
             let html = '';
             departures.forEach((d, i) => {
                 const isExpanded = activeRoute && activeRoute.key === d.itinKey;
+                const tight = wSecs && (d.arriveAt - Date.now()) / 1000 < wSecs;
                 html += `
                     <div class="bus-card ${isExpanded ? 'open' : ''}">
                         <div class="bus-card-content ${isSilent ? 'blink' : ''}" onclick="toggleItinerary(${i}, this.parentElement)">
@@ -655,8 +826,9 @@
                                 <div class="bus-dest-label">hacia</div>
                                 <div class="bus-dest">${esc(d.dest)}</div>
                                 ${d.next ? `<div class="bus-next">${esc(d.next)}</div>` : ''}
+                                ${d.occ ? `<div class="occ-badge ${d.occ.high ? 'occ-high' : ''}">👥 ${esc(d.occ.label)}</div>` : ''}
                             </div>
-                            <div class="bus-eta">${etaHTML(d.mins)}</div>
+                            <div class="bus-eta">${etaHTML(d.arriveAt)}${tight ? '<span class="catch-warn" title="Justo de tiempo llegando andando">🏃</span>' : ''}</div>
                             <div class="bus-chevron">▼</div>
                         </div>
                         <div class="bus-itinerary" style="display:${isExpanded ? 'block' : 'none'}" onclick="event.stopPropagation()">
@@ -672,9 +844,11 @@
             const res = await fetch(`https://api.tmb.cat/v1/ibus/stops/${stop.code}?${TMB_AUTH}`);
             if (!res.ok) throw new Error('Parada de bus no encontrada en TMB.');
             const data = await res.json();
+            const now = Date.now();
             return (data.data.ibus || []).map(b => ({
                 line: b.line, color: busColor(b.line), dest: b.destination,
-                mins: b['t-in-min'], next: null,
+                mins: b['t-in-min'], arriveAt: now + (b['t-in-s'] || b['t-in-min'] * 60) * 1000,
+                next: null, occ: null,
                 itinKey: `bus:${b.routeId}`, itin: { mode: 'bus', routeId: b.routeId, stopCode: stop.code }
             }));
         }
@@ -686,13 +860,16 @@
             if (!Array.isArray(data) || data.length === 0) {
                 throw new Error('Esta estación no ofrece tiempos en tiempo real (líneas automáticas L9/L10).');
             }
+            const now = Date.now();
             return data.filter(via => via.propers_trens && via.propers_trens.length > 0).map(via => {
                 const t = via.propers_trens;
-                const mins = Math.max(0, Math.round(t[0].temps_restant / 60));
+                const occPct = via.ocupacio_estacio_sortida && via.ocupacio_estacio_sortida.percentatge_ocupacio;
                 return {
                     line: t[0].nom_linia, color: metroColor(t[0].nom_linia), dest: t[0].desti_trajecte,
-                    mins,
+                    mins: Math.max(0, Math.round(t[0].temps_restant / 60)),
+                    arriveAt: now + t[0].temps_restant * 1000,
                     next: t[1] ? `Siguiente: ${Math.max(1, Math.round(t[1].temps_restant / 60))} min` : null,
+                    occ: occPct > 0 ? { label: `Andén al ${occPct}%`, high: occPct >= 70 } : null,
                     itinKey: `metro:${via.codi_linia}:${via.codi_via}`,
                     itin: { mode: 'metro', lineCode: via.codi_linia, line: t[0].nom_linia, stationId: stop.id }
                 };
@@ -716,6 +893,15 @@
             throw new Error('El servicio del TRAM no responde ahora mismo. Vuelve a intentarlo.');
         }
 
+        const TRAM_OCC = {
+            'EMPTY': { label: 'Vacío', high: false },
+            'MANY_SEATS_AVAILABLE': { label: 'Asientos libres', high: false },
+            'FEW_SEATS_AVAILABLE': { label: 'Pocos asientos', high: false },
+            'STANDING_ROOM_ONLY': { label: 'Solo de pie', high: true },
+            'CRUSHED_STANDING_ROOM_ONLY': { label: 'Muy lleno', high: true },
+            'FULL': { label: 'Lleno', high: true }
+        };
+
         async function fetchTramArrivals(stop) {
             const all = await fetchTramProxy('stopTimes');
             const mine = all.filter(t => t.code == stop.out || t.code == stop.ret);
@@ -726,16 +912,17 @@
                 const when = new Date(String(t.arrivalTime).replace(' ', 'T')).getTime();
                 if (isNaN(when) || when < now - 30000) return;
                 const k = `${t.lineName}|${t.destination}`;
-                (groups[k] = groups[k] || []).push(when);
+                (groups[k] = groups[k] || []).push({ when, occ: t.occupancy });
             });
-            return Object.entries(groups).map(([k, times]) => {
-                times.sort((a, b) => a - b);
+            return Object.entries(groups).map(([k, items]) => {
+                items.sort((a, b) => a.when - b.when);
                 const [lineName, dest] = k.split('|');
-                const mins = Math.max(0, Math.round((times[0] - now) / 60000));
                 return {
                     line: 'T' + lineName, color: TRAM_COLOR, dest,
-                    mins,
-                    next: times[1] ? `Siguiente: ${Math.max(1, Math.round((times[1] - now) / 60000))} min` : null,
+                    mins: Math.max(0, Math.round((items[0].when - now) / 60000)),
+                    arriveAt: items[0].when,
+                    next: items[1] ? `Siguiente: ${Math.max(1, Math.round((items[1].when - now) / 60000))} min` : null,
+                    occ: TRAM_OCC[items[0].occ] || null,
                     itinKey: `tram:${lineName}:${dest}`,
                     itin: { mode: 'tram', lineId: parseInt(lineName, 10), stopName: stop.name }
                 };
@@ -879,18 +1066,29 @@
         }
 
         // --- 14. BÚSQUEDA POR GPS ---
+        const overpassCache = new Map(); // query -> { t, data } (2 min)
         async function fetchOverpass(query) {
+            const hit = overpassCache.get(query);
+            if (hit && Date.now() - hit.t < 120000) return hit.data;
             for (const url of OVERPASS_ENDPOINTS) {
                 try {
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 8000);
                     const res = await fetch(url, {
                         method: "POST",
                         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: `data=${encodeURIComponent(query)}`
+                        body: `data=${encodeURIComponent(query)}`,
+                        signal: ctrl.signal
                     });
-                    if (res.ok) return await res.json();
+                    clearTimeout(timer);
+                    if (res.ok) {
+                        const data = await res.json();
+                        overpassCache.set(query, { t: Date.now(), data });
+                        return data;
+                    }
                     console.warn("Servidor ocupado:", url);
                 } catch (e) {
-                    console.warn("Fallo de conexión con servidor:", url);
+                    console.warn("Fallo o timeout del servidor:", url);
                 }
             }
             throw new Error("overpass");
@@ -932,86 +1130,94 @@
                 return;
             }
 
-            navigator.geolocation.getCurrentPosition(async (pos) => {
+            navigator.geolocation.getCurrentPosition((pos) => {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
-                setLoading("🗺️ Buscando bus, metro y tram cerca...");
-
-                map.setView([lat, lon], 16);
+                userPos = { lat, lon };
                 userMarkerLayer.clearLayers();
                 L.marker([lat, lon], { icon: userIcon, zIndexOffset: 500 }).addTo(userMarkerLayer).bindPopup("<b>Estás aquí</b>");
-
-                // Las tres redes en paralelo; si una falla, las otras siguen
-                const [busRes, metroRes] = await Promise.allSettled([
-                    findBusStops(lat, lon),
-                    getMetroStations()
-                ]);
-
-                const busStops = busRes.status === 'fulfilled' ? busRes.value : [];
-                const metroStops = (metroRes.status === 'fulfilled' ? metroRes.value : [])
-                    .map(s => ({ type: 'metro', id: s.id, name: s.name, lines: s.lines, lat: s.lat, lon: s.lon, dist: getDistance(lat, lon, s.lat, s.lon) }))
-                    .filter(s => s.dist <= 800);
-                const tramStops = TRAM_STOPS
-                    .map(([name, slat, slon, out, ret]) => ({ type: 'tram', name, out, ret, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }))
-                    .filter(s => s.dist <= 800);
-
-                nearbyStops = [...busStops, ...metroStops, ...tramStops]
-                    .sort((a, b) => a.dist - b.dist)
-                    .slice(0, 15);
-
-                if (nearbyStops.length === 0) {
-                    const reason = busRes.status === 'rejected'
-                        ? "El buscador de paradas está saturado. Inténtalo en unos minutos o busca por nº de parada."
-                        : "No hay paradas de bus, metro ni tram a menos de 900 m de tu posición.";
-                    showError(reason, "searchGPS");
-                    return;
-                }
-
-                markersLayer.clearLayers();
-                stopMarkers = {};
-                nearbyStops.forEach(stop => {
-                    // metro y tram por encima: hay más paradas de bus y taparían sus señales
-                    const z = stop.type === 'metro' ? 200 : (stop.type === 'tram' ? 150 : 0);
-                    const marker = L.marker([stop.lat, stop.lon], { icon: stopPinIcon(stop.type, false), zIndexOffset: z }).addTo(markersLayer);
-                    marker.bindPopup(`<b>${esc(stop.name)}</b><br><small>${MODE_NAME[stop.type]} · a ${fmtDist(stop.dist)}</small>`);
-                    marker.on('click', () => {
-                        map.setView([stop.lat, stop.lon], 17);
-                        fetchArrivals(stop);
-                    });
-                    stopMarkers[stopKey(stop)] = marker;
-                });
-                renderNearbyChips();
-
-                setLoading("⏱️ Conectando en tiempo real...");
-
-                // Elige la parada más cercana con servicio ahora mismo
-                let found = false;
-                for (let i = 0; i < Math.min(nearbyStops.length, 3); i++) {
-                    const stop = nearbyStops[i];
-                    if (stop.type === 'tram') { fetchArrivals(stop); found = true; break; }
-                    try {
-                        const url = stop.type === 'bus'
-                            ? `https://api.tmb.cat/v1/ibus/stops/${stop.code}?${TMB_AUTH}`
-                            : `https://api.tmb.cat/v1/imetro/estacions/${stop.id}?${TMB_AUTH}`;
-                        const res = await fetch(url);
-                        if (!res.ok) continue;
-                        const data = await res.json();
-                        const hasService = stop.type === 'bus'
-                            ? (data.data && data.data.ibus && data.data.ibus.length > 0)
-                            : (Array.isArray(data) && data.length > 0);
-                        if (hasService) {
-                            fetchArrivals(stop);
-                            found = true;
-                            break;
-                        }
-                    } catch (e) { /* prueba la siguiente */ }
-                }
-
-                if (!found) fetchArrivals(nearbyStops[0]);
-
+                exploreAt(lat, lon, true);
             }, () => {
-                showError("No has dado permiso de ubicación o el GPS está desactivado. También puedes buscar por nº de parada.");
+                showError("No has dado permiso de ubicación o el GPS está desactivado. También puedes buscar por nº de parada o mantener pulsado el mapa para explorar una zona.");
             }, { timeout: 10000, maximumAge: 30000 });
+        }
+
+        // Busca transporte alrededor de un punto (tu posición o cualquier zona del mapa).
+        // walkable = las distancias son desde tu posición real (activa avisos de ir andando)
+        async function exploreAt(lat, lon, walkable = false) {
+            hideError();
+            stopCountdown();
+            setLoading("🗺️ Buscando bus, metro y tram en la zona...");
+            map.setView([lat, lon], 16);
+
+            // Las tres redes en paralelo; si una falla, las otras siguen
+            const [busRes, metroRes] = await Promise.allSettled([
+                findBusStops(lat, lon),
+                getMetroStations()
+            ]);
+
+            const busStops = busRes.status === 'fulfilled' ? busRes.value : [];
+            const metroStops = (metroRes.status === 'fulfilled' ? metroRes.value : [])
+                .map(s => ({ type: 'metro', id: s.id, name: s.name, lines: s.lines, lat: s.lat, lon: s.lon, dist: getDistance(lat, lon, s.lat, s.lon) }))
+                .filter(s => s.dist <= 800);
+            const tramStops = TRAM_STOPS
+                .map(([name, slat, slon, out, ret]) => ({ type: 'tram', name, out, ret, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }))
+                .filter(s => s.dist <= 800);
+
+            nearbyStops = [...busStops, ...metroStops, ...tramStops]
+                .map(s => ({ ...s, walkable }))
+                .sort((a, b) => a.dist - b.dist)
+                .slice(0, 15);
+
+            if (nearbyStops.length === 0) {
+                const reason = busRes.status === 'rejected'
+                    ? "El buscador de paradas está saturado. Inténtalo en unos minutos o busca por nº de parada."
+                    : "No hay paradas de bus, metro ni tram a menos de 900 m de este punto.";
+                showError(reason, "searchGPS");
+                return;
+            }
+
+            markersLayer.clearLayers();
+            stopMarkers = {};
+            nearbyStops.forEach(stop => {
+                // metro y tram por encima: hay más paradas de bus y taparían sus señales
+                const z = stop.type === 'metro' ? 200 : (stop.type === 'tram' ? 150 : 0);
+                const marker = L.marker([stop.lat, stop.lon], { icon: stopPinIcon(stop.type, false), zIndexOffset: z }).addTo(markersLayer);
+                marker.bindPopup(`<b>${esc(stop.name)}</b><br><small>${MODE_NAME[stop.type]} · a ${fmtDist(stop.dist)}</small>`);
+                marker.on('click', () => {
+                    map.setView([stop.lat, stop.lon], 17);
+                    fetchArrivals(stop);
+                });
+                stopMarkers[stopKey(stop)] = marker;
+            });
+            renderNearbyChips();
+
+            setLoading("⏱️ Conectando en tiempo real...");
+
+            // Elige la parada más cercana con servicio ahora mismo
+            let found = false;
+            for (let i = 0; i < Math.min(nearbyStops.length, 3); i++) {
+                const stop = nearbyStops[i];
+                if (stop.type === 'tram') { fetchArrivals(stop); found = true; break; }
+                try {
+                    const url = stop.type === 'bus'
+                        ? `https://api.tmb.cat/v1/ibus/stops/${stop.code}?${TMB_AUTH}`
+                        : `https://api.tmb.cat/v1/imetro/estacions/${stop.id}?${TMB_AUTH}`;
+                    const res = await fetch(url);
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    const hasService = stop.type === 'bus'
+                        ? (data.data && data.data.ibus && data.data.ibus.length > 0)
+                        : (Array.isArray(data) && data.length > 0);
+                    if (hasService) {
+                        fetchArrivals(stop);
+                        found = true;
+                        break;
+                    }
+                } catch (e) { /* prueba la siguiente */ }
+            }
+
+            if (!found) fetchArrivals(nearbyStops[0]);
         }
     </script>
 </body>
