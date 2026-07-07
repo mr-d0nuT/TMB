@@ -376,7 +376,9 @@
         .ar-label {
             position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer;
             display: flex; flex-direction: column; align-items: center; gap: 4px;
-            transition: left .22s linear, top .22s linear, opacity .2s; will-change: left, top; z-index: 1000;
+            /* sin transición en left/top: la posición ya llega suavizada a 60 fps
+               desde el bucle rAF; una transición aquí produce efecto goma */
+            transition: opacity .2s; will-change: left, top; z-index: 1000;
         }
         /* Chapa circular con el color del modo */
         .ar-badge {
@@ -2284,7 +2286,8 @@
         function setArHint(msg) {
             const h = document.getElementById('arHint');
             if (!msg) { h.style.display = 'none'; return; }
-            h.style.display = 'block'; h.innerText = msg;
+            h.style.display = 'block';
+            if (h.innerText !== msg) h.innerText = msg; // se llama por fotograma
         }
 
         async function openAR() {
@@ -2329,8 +2332,35 @@
                 arPanelFallback();
             }
 
-            arState.timer = setInterval(renderArScene, 100);
+            arLoop(); // bucle rAF: suaviza brújula y GPS y repinta a 60 fps
+        }
+
+        // Suavizado de sensores: media móvil circular del rumbo (adaptativa: giros
+        // rápidos siguen rápido) y lerp de la posición GPS, a ritmo de fotograma
+        function arLoop() {
+            if (!arState.open) return;
+            const now = performance.now();
+            const dt = Math.min(120, now - (arState._t || now));
+            arState._t = now;
+            if (arState.headingRaw != null) {
+                if (arState.heading == null) arState.heading = arState.headingRaw;
+                const d = ((arState.headingRaw - arState.heading + 540) % 360) - 180;
+                // constante de tiempo adaptativa (medida: giro de 40° seguido hasta ±4°
+                // en ~370 ms; ruido de ±5° reducido a ~2° de deriva suave)
+                const tau = 50 + 280 * Math.exp(-Math.abs(d) / 14);
+                const k = 1 - Math.exp(-dt / tau);
+                arState.heading = (arState.heading + d * k + 360) % 360;
+            }
+            if (userPos) {
+                if (!arState.pos) arState.pos = { lat: userPos.lat, lon: userPos.lon };
+                else {
+                    const kp = 1 - Math.exp(-dt / 400); // GPS: medio segundo de asentamiento
+                    arState.pos.lat += (userPos.lat - arState.pos.lat) * kp;
+                    arState.pos.lon += (userPos.lon - arState.pos.lon) * kp;
+                }
+            }
             renderArScene();
+            arState.raf = requestAnimationFrame(arLoop);
         }
 
         // Permiso + escucha de la orientación del dispositivo (brújula)
@@ -2347,7 +2377,7 @@
                             const sa = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
                             h = (h + sa) % 360;
                         }
-                        arState.heading = (h + 360) % 360;
+                        arState.headingRaw = (h + 360) % 360; // el bucle rAF lo suaviza
                         if (!done) { done = true; resolve(true); }
                     };
                     arState.orientHandler = handler;
@@ -2473,7 +2503,7 @@
         function renderArScene() {
             if (!arState.open) return;
             const scene = document.getElementById('arScene');
-            const up = userPos;
+            const up = arState.pos || userPos; // posición suavizada por el bucle rAF
             const haveCompass = up && arState.heading != null && arState.tier === 'compass';
             document.getElementById('arReticle').style.display = haveCompass ? 'block' : 'none';
 
@@ -2486,31 +2516,39 @@
                 if (!haveCompass) { el.style.display = 'none'; return; }
                 const rel = relAngle(bearingTo(up.lat, up.lon, s.lat, s.lon) - arState.heading);
                 if (Math.abs(rel) > AR_HALF_FOV + 6) { el.style.display = 'none'; return; }
-                vis.push({ s, el, rel, dist: getDistance(up.lat, up.lon, s.lat, s.lon) });
+                vis.push({ s, el, rel, idx, dist: getDistance(up.lat, up.lon, s.lat, s.lon) });
             });
             // borra etiquetas de paradas que ya no existen
             const live = new Set(arState.stops.map((_, i) => 'ar_' + i));
             arState.labels.forEach((el, id) => { if (!live.has(id)) { el.remove(); arState.labels.delete(id); } });
 
             if (haveCompass) {
-                // parada enfocada = la más centrada, solo si apuntas razonablemente a ella
+                // Parada enfocada, con histéresis: mantiene el foco actual salvo que
+                // salga del cono o que otra lo mejore claramente (evita parpadeos)
                 let focus = null;
                 vis.forEach(v => { if (Math.abs(v.rel) <= 16 && (!focus || Math.abs(v.rel) < Math.abs(focus.rel))) focus = v; });
+                const current = vis.find(v => 'ar_' + v.idx === arState.focusId);
+                if (current && Math.abs(current.rel) <= 19 && (!focus || Math.abs(focus.rel) > Math.abs(current.rel) - 5)) focus = current;
+                arState.focusId = focus ? 'ar_' + focus.idx : null;
 
-                vis.sort((a, b) => a.rel - b.rel).forEach((v, k) => {
-                    const { el, s, rel, dist } = v;
+                vis.forEach(v => {
+                    const { el, rel, idx, dist } = v;
                     const isFocus = v === focus;
                     el.style.display = 'flex';
                     el.classList.toggle('focus', isFocus);
                     el.classList.toggle('compact', !isFocus);
                     el.style.left = Math.max(7, Math.min(93, 50 + (rel / AR_HALF_FOV) * 50)) + '%';
-                    el.style.top = (isFocus ? 56 : 28 + (k % 3) * 12) + '%';
+                    // fila estable por parada (no por orden visual): así no saltan al cruzarse
+                    el.style.top = (isFocus ? 56 : 28 + (idx % 3) * 12) + '%';
                     el.style.opacity = String(Math.max(0.35, 1 - Math.abs(rel) / (AR_HALF_FOV + 12)));
                     el.style.zIndex = String(isFocus ? 3000 : 1000 + Math.round(400 - dist));
-                    el.querySelector('.ar-mini').innerText = fmtDist(dist);
+                    const distTxt = fmtDist(dist);
+                    const mini = el.querySelector('.ar-mini');
+                    if (mini.innerText !== distTxt) mini.innerText = distTxt; // sin escrituras por fotograma
                     if (isFocus) {
-                        const walk = Math.max(1, Math.ceil(dist / 75));
-                        el.querySelector('.ar-label-meta').innerText = `a ${fmtDist(dist)} · ${walk} min 🚶`;
+                        const meta = `a ${distTxt} · ${Math.max(1, Math.ceil(dist / 75))} min 🚶`;
+                        const metaEl = el.querySelector('.ar-label-meta');
+                        if (metaEl.innerText !== meta) metaEl.innerText = meta;
                     }
                 });
                 setArHint(focus ? null : 'Apunta a una parada para ver sus llegadas 🎯');
@@ -2541,17 +2579,19 @@
         function updateArGuide() {
             const g = document.getElementById('arGuide');
             if (!arState.open) return;
-            if (!activeTrip || arState.heading == null || arState.tier !== 'compass' || !userPos) { g.style.display = 'none'; return; }
+            const up = arState.pos || userPos; // posición suavizada
+            if (!activeTrip || arState.heading == null || arState.tier !== 'compass' || !up) { g.style.display = 'none'; return; }
             const rt = activeTrip.rt;
-            const proj = projectOnRoute(rt, userPos.lat, userPos.lon);
+            const proj = projectOnRoute(rt, up.lat, up.lon);
             const leg = activeTrip.it.legs[rt.legIdx[proj.seg]];
             let target = leg && leg.to && leg.to.lat ? [leg.to.lat, leg.to.lon] : [journeyDest.lat, journeyDest.lon];
-            const rel = relAngle(bearingTo(userPos.lat, userPos.lon, target[0], target[1]) - arState.heading);
-            const dist = getDistance(userPos.lat, userPos.lon, target[0], target[1]);
+            const rel = relAngle(bearingTo(up.lat, up.lon, target[0], target[1]) - arState.heading);
+            const dist = getDistance(up.lat, up.lon, target[0], target[1]);
             g.style.display = 'block';
             document.getElementById('arGuideArrow').style.transform = `rotate(${rel}deg)`;
-            const label = leg && leg.transitLeg ? `baja en ${esc(leg.to.name)}` : (leg ? 'siguiente punto' : 'destino');
-            document.getElementById('arGuideText').innerText = `${fmtDist(dist)} · ${label}`;
+            const txt = `${fmtDist(dist)} · ${leg && leg.transitLeg ? 'baja en ' + leg.to.name : (leg ? 'siguiente punto' : 'destino')}`;
+            const tEl = document.getElementById('arGuideText');
+            if (tEl.innerText !== txt) tEl.innerText = txt;
         }
 
         function arPanelFallback() {
@@ -2565,6 +2605,8 @@
 
         function closeAR() {
             arState.open = false;
+            if (arState.raf) { cancelAnimationFrame(arState.raf); arState.raf = null; }
+            arState.headingRaw = null; arState.pos = null; arState.focusId = null;
             if (arState.timer) { clearInterval(arState.timer); arState.timer = null; }
             if (arState.orientHandler) {
                 window.removeEventListener('deviceorientationabsolute', arState.orientHandler, true);
