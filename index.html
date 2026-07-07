@@ -1202,15 +1202,36 @@
             try {
                 const origin = await ensureOrigin();
                 journeyDest = { name: name || 'Destino', lat, lon };
-                const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
-                    `&fromPlace=${origin.lat},${origin.lon}&toPlace=${lat},${lon}` +
-                    `&mode=TRANSIT,WALK&numItineraries=4&locale=es`;
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('El planificador no responde. Inténtalo de nuevo.');
-                const data = await res.json();
-                journeyItins = (data.plan && data.plan.itineraries) || [];
-                if (journeyItins.length === 0) throw new Error('No se ha encontrado ninguna ruta en transporte público hasta ahí.');
-                journeyItins.sort((a, b) => a.endTime - b.endTime); // la que llega antes, primera
+                const planReq = async (mode) => {
+                    const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
+                        `&fromPlace=${origin.lat},${origin.lon}&toPlace=${lat},${lon}` +
+                        `&mode=${mode}&numItineraries=4&locale=es`;
+                    const res = await fetch(url);
+                    if (!res.ok) return [];
+                    const data = await res.json();
+                    return (data.plan && data.plan.itineraries) || [];
+                };
+                // El planificador prima el metro al optimizar la llegada y descarta
+                // los buses: pedimos también rutas solo-bus y las fusionamos
+                const [rAll, rBus] = await Promise.allSettled([planReq('TRANSIT,WALK'), planReq('BUS,WALK')]);
+                let its = [
+                    ...(rAll.status === 'fulfilled' ? rAll.value : []),
+                    ...(rBus.status === 'fulfilled' ? rBus.value : [])
+                ];
+                // fuera caminatas puras si hay alternativas con transporte
+                const withTransit = its.filter(it => it.legs.some(l => l.transitLeg));
+                if (withTransit.length) its = withTransit;
+                // sin duplicados (misma secuencia de líneas y paradas de subida)
+                const seen = new Set();
+                its = its.filter(it => {
+                    const sig = it.legs.filter(l => l.transitLeg).map(l => (l.routeShortName || '') + '@' + (l.from.stopId || '')).join('>');
+                    if (seen.has(sig)) return false;
+                    seen.add(sig);
+                    return true;
+                });
+                if (its.length === 0) throw new Error('No se ha encontrado ninguna ruta en transporte público hasta ahí.');
+                its.sort((a, b) => a.endTime - b.endTime); // la que llega antes, primera
+                journeyItins = its.slice(0, 6);
                 setLoading(null);
                 renderJourneys();
                 toggleJourneyDetail(0, document.querySelector('#journeyResults .jcard'), true);
