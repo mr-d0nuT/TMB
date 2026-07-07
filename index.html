@@ -318,6 +318,85 @@
         .jstep-sub { font-size: .76rem; color: var(--text-faint); margin-top: 1px; }
 
         footer { text-align: center; font-size: .72rem; color: var(--text-faint); padding: 26px 0 10px; }
+
+        /* ---- Iniciar trayecto (botón dentro del detalle) ---- */
+        .trip-start-btn {
+            width: 100%; margin-bottom: 12px; padding: 12px; border: none; border-radius: 12px;
+            background: linear-gradient(135deg, #0a84ff, #0060df); color: #fff;
+            font-size: .95rem; font-weight: 800; cursor: pointer; letter-spacing: .2px;
+            box-shadow: 0 4px 14px rgba(10,132,255,.35); transition: transform .12s;
+        }
+        .trip-start-btn:active { transform: scale(.97); }
+
+        /* Segundo FAB (AR) apilado sobre el de GPS */
+        .map-fab.ar { bottom: 68px; font-size: 20px; }
+
+        /* FAB de recentrar durante navegación */
+        #tripRecenter {
+            position: absolute; left: 12px; bottom: 12px; z-index: 1001; display: none;
+            width: 48px; height: 48px; border-radius: 50%; background: #0a84ff; color: #fff;
+            border: none; box-shadow: var(--shadow-lg); font-size: 22px; cursor: pointer;
+            align-items: center; justify-content: center;
+        }
+
+        /* ---- Panel de navegación en vivo ---- */
+        #tripPanel {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 2500; display: none;
+            background: var(--card); border-top: 1px solid var(--border);
+            box-shadow: 0 -6px 24px rgba(0,0,0,.18); padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+            border-radius: 18px 18px 0 0; max-width: 640px; margin: 0 auto;
+        }
+        .trip-progress-track { height: 8px; border-radius: 6px; background: color-mix(in srgb, var(--text) 12%, var(--card)); overflow: hidden; }
+        .trip-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #34c759, #0a84ff); border-radius: 6px; transition: width .5s ease; }
+        .trip-stats { display: flex; align-items: baseline; gap: 18px; margin: 10px 0 6px; }
+        .trip-stat b { font-size: 1.25rem; font-weight: 800; }
+        .trip-stat span { font-size: .7rem; color: var(--text-faint); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-left: 4px; }
+        .trip-next { font-size: .9rem; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; min-height: 22px; }
+        .trip-next .trip-next-badge { flex: 0 0 auto; padding: 2px 8px; border-radius: 8px; color: #fff; font-weight: 800; font-size: .8rem; }
+        .trip-alert { display: none; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, #ff9f0a 16%, var(--card)); color: var(--text); font-size: .85rem; font-weight: 600; align-items: center; gap: 10px; }
+        .trip-alert button { flex: 0 0 auto; padding: 7px 12px; border: none; border-radius: 9px; background: #ff9f0a; color: #201500; font-weight: 800; cursor: pointer; }
+        .trip-actions { display: flex; gap: 10px; margin-top: 12px; }
+        .trip-actions button { flex: 1; padding: 11px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-weight: 800; font-size: .9rem; cursor: pointer; }
+        .trip-actions .trip-ar { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+        .trip-actions .trip-end { background: color-mix(in srgb, var(--primary) 12%, var(--card)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, transparent); }
+
+        /* ---- Modo AR / cámara ---- */
+        #arOverlay { position: fixed; inset: 0; z-index: 4000; display: none; background: #000; overflow: hidden; }
+        #arVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+        #arScene { position: absolute; inset: 0; pointer-events: none; }
+        .ar-topbar {
+            position: absolute; top: 0; left: 0; right: 0; z-index: 6; padding: calc(10px + env(safe-area-inset-top)) 14px 12px;
+            display: flex; align-items: center; gap: 10px; color: #fff;
+            background: linear-gradient(180deg, rgba(0,0,0,.6), transparent);
+        }
+        .ar-topbar .ar-title { font-weight: 800; font-size: 1rem; flex: 1; }
+        .ar-tier { font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; background: rgba(255,255,255,.18); padding: 4px 8px; border-radius: 20px; }
+        .ar-close { width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(0,0,0,.5); color: #fff; font-size: 20px; cursor: pointer; }
+        .ar-hint { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 6; color: #fff; background: rgba(0,0,0,.55); padding: 8px 16px; border-radius: 20px; font-size: .82rem; font-weight: 600; text-align: center; max-width: 90%; }
+        .ar-label {
+            position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; gap: 3px; transition: left .18s linear, top .18s linear, opacity .2s;
+            will-change: left, top;
+        }
+        .ar-label-pin { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); }
+        .ar-label-card {
+            background: rgba(20,22,26,.82); color: #fff; border: 1.5px solid rgba(255,255,255,.25);
+            border-radius: 12px; padding: 6px 10px; text-align: center; backdrop-filter: blur(6px);
+            box-shadow: 0 4px 14px rgba(0,0,0,.5); max-width: 190px;
+        }
+        .ar-label-name { font-weight: 800; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+        .ar-label-meta { font-size: .72rem; opacity: .85; font-weight: 600; margin-top: 1px; }
+        .ar-label-arr { font-size: .74rem; font-weight: 700; margin-top: 3px; line-height: 1.4; }
+        .ar-label-arr .l { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 6px; color: #fff; font-weight: 800; margin-right: 4px; }
+        .ar-edge { position: absolute; top: 50%; transform: translateY(-50%); z-index: 5; color: #fff; font-size: 26px; opacity: .85; text-shadow: 0 1px 3px #000; pointer-events: none; }
+        /* Guía del trayecto / destino */
+        .ar-guide { position: absolute; top: 46%; left: 50%; transform: translate(-50%,-50%); z-index: 6; text-align: center; color: #fff; pointer-events: none; display: none; }
+        .ar-guide-arrow { font-size: 72px; line-height: 1; filter: drop-shadow(0 3px 8px rgba(0,0,0,.7)); transition: transform .15s linear; }
+        .ar-guide-text { margin-top: 2px; font-weight: 800; font-size: .95rem; background: rgba(0,0,0,.5); display: inline-block; padding: 4px 12px; border-radius: 20px; }
+        .ar-fallback { position: absolute; inset: 0; z-index: 7; display: none; flex-direction: column; padding: 78px 20px 20px; color: #fff; gap: 12px; overflow-y: auto; }
+        .ar-fallback h3 { font-size: 1.05rem; margin-bottom: 4px; }
+        .ar-fb-stop { background: rgba(255,255,255,.1); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+        .ar-fb-stop .d { margin-left: auto; opacity: .85; font-weight: 700; font-size: .85rem; }
     </style>
 </head>
 <body>
@@ -339,6 +418,8 @@
         <div class="map-wrap">
             <div id="map"></div>
             <button class="map-fab" onclick="searchGPS()" title="Buscar transporte cerca de mí" aria-label="Buscar transporte cerca de mí">📍</button>
+            <button class="map-fab ar" onclick="openAR()" title="Ver en realidad aumentada" aria-label="Ver paradas en realidad aumentada con la cámara">📷</button>
+            <button id="tripRecenter" onclick="recenterTrip()" title="Centrar en mi posición" aria-label="Centrar el mapa en mi posición">🧭</button>
         </div>
         <div class="map-hint">💡 Mantén pulsado cualquier punto del mapa para ver cómo llegar o explorar la zona</div>
 
@@ -408,6 +489,42 @@
 
         <footer>Datos en tiempo real de TMB y TRAM · Mapa © OpenStreetMap © CARTO</footer>
     </main>
+
+    <!-- Panel de navegación en vivo (Iniciar trayecto) -->
+    <div id="tripPanel">
+        <div class="trip-progress-track"><div class="trip-progress-fill" id="tripFill"></div></div>
+        <div class="trip-stats">
+            <div class="trip-stat"><b id="tripPct">0%</b><span>completado</span></div>
+            <div class="trip-stat"><b id="tripRemDist">—</b><span>restante</span></div>
+            <div class="trip-stat"><b id="tripRemTime">—</b><span>aprox.</span></div>
+        </div>
+        <div class="trip-next" id="tripNext"></div>
+        <div class="trip-alert" id="tripAlert">
+            <span id="tripAlertText">Te has desviado de la ruta.</span>
+            <button onclick="replanFromTrip()">Recalcular</button>
+        </div>
+        <div class="trip-actions">
+            <button class="trip-ar" onclick="openAR()">📷 AR</button>
+            <button class="trip-end" onclick="stopTrip()">■ Finalizar</button>
+        </div>
+    </div>
+
+    <!-- Overlay de realidad aumentada -->
+    <div id="arOverlay">
+        <video id="arVideo" autoplay playsinline muted></video>
+        <div id="arScene"></div>
+        <div class="ar-guide" id="arGuide">
+            <div class="ar-guide-arrow" id="arGuideArrow">⬆️</div>
+            <div class="ar-guide-text" id="arGuideText"></div>
+        </div>
+        <div class="ar-fallback" id="arFallback"></div>
+        <div class="ar-topbar">
+            <div class="ar-title">Paradas alrededor</div>
+            <span class="ar-tier" id="arTier">…</span>
+            <button class="ar-close" onclick="closeAR()" aria-label="Cerrar realidad aumentada">✕</button>
+        </div>
+        <div class="ar-hint" id="arHint">Mueve el móvil para calibrar la brújula 🔄</div>
+    </div>
 
     <script>
         // --- 1. SPLASH (se cierra sí o sí, aunque falle el resto) ---
@@ -1294,7 +1411,7 @@
             const isOpen = detail.style.display === 'block';
             document.querySelectorAll('.jcard-detail').forEach(el => el.style.display = 'none');
             if (isOpen && !forceOpen) { routeLayer.clearLayers(); return; }
-            detail.innerHTML = journeyStepsHTML(it);
+            detail.innerHTML = `<button class="trip-start-btn" onclick="event.stopPropagation(); startTrip(${i})">▶ Iniciar trayecto</button>` + journeyStepsHTML(it);
             detail.style.display = 'block';
             drawJourney(it);
         }
@@ -1528,6 +1645,424 @@
             }
 
             if (!found) fetchArrivals(nearbyStops[0]);
+        }
+
+        /* ===================== 15. NAVEGACIÓN EN VIVO ("Iniciar trayecto") ===================== */
+        // Proyección plana local (metros) válida para el área metropolitana de Barcelona
+        const REF_LAT = 41.4;
+        const M_PER_DEG_LAT = 110540;
+        const M_PER_DEG_LON = 111320 * Math.cos(REF_LAT * Math.PI / 180);
+        const toXY = (lat, lon) => [lon * M_PER_DEG_LON, lat * M_PER_DEG_LAT];
+        const lerpPt = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+
+        let tripLayer = null, tripDoneLayer = null, tripRestLayer = null, tripMeMarker = null;
+        let activeTrip = null; // { it, rt, follow, offCount, arrived, watchId }
+
+        // Une la geometría de todos los tramos en una sola polilínea con distancias acumuladas
+        function buildRoutePoints(it) {
+            const pts = [], legIdx = [];
+            it.legs.forEach((l, li) => {
+                if (!l.legGeometry || !l.legGeometry.points) return;
+                const p = decodePolyline(l.legGeometry.points);
+                p.forEach((pt, k) => {
+                    const last = pts[pts.length - 1];
+                    if (last && k === 0 && last[0] === pt[0] && last[1] === pt[1]) return; // no dupliques la unión
+                    pts.push(pt); legIdx.push(li);
+                });
+            });
+            const cum = [0];
+            for (let i = 1; i < pts.length; i++)
+                cum[i] = cum[i - 1] + getDistance(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+            return { pts, legIdx, cum, total: cum[cum.length - 1] || 0 };
+        }
+
+        // Proyecta tu posición sobre la ruta: devuelve desvío (m), segmento y metros recorridos
+        function projectOnRoute(rt, lat, lon) {
+            const [px, py] = toXY(lat, lon);
+            let best = { dist: Infinity, seg: 0, t: 0, along: 0 };
+            for (let i = 0; i < rt.pts.length - 1; i++) {
+                const [ax, ay] = toXY(rt.pts[i][0], rt.pts[i][1]);
+                const [bx, by] = toXY(rt.pts[i + 1][0], rt.pts[i + 1][1]);
+                const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+                let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+                t = Math.max(0, Math.min(1, t));
+                const cx = ax + t * dx, cy = ay + t * dy;
+                const d = Math.hypot(px - cx, py - cy);
+                if (d < best.dist) best = { dist: d, seg: i, t, along: rt.cum[i] + t * Math.sqrt(len2) };
+            }
+            return best;
+        }
+
+        function startTrip(i) {
+            const it = journeyItins[i];
+            if (!it || !journeyDest) return;
+            if (!navigator.geolocation) { showError('Este dispositivo no tiene GPS para navegar.'); return; }
+            stopTrip(true);
+            const rt = buildRoutePoints(it);
+            if (rt.total === 0) { showError('Esta ruta no tiene trazado para navegar.'); return; }
+
+            if (!tripLayer) tripLayer = L.layerGroup().addTo(map);
+            tripLayer.clearLayers();
+            routeLayer.clearLayers(); // fuera la vista previa; ahora manda la navegación
+            tripRestLayer = L.polyline(rt.pts, { color: '#0a84ff', weight: 6, opacity: .92, lineJoin: 'round', lineCap: 'round' }).addTo(tripLayer);
+            tripDoneLayer = L.polyline([], { color: '#7a828c', weight: 6, opacity: .9, lineJoin: 'round', lineCap: 'round' }).addTo(tripLayer);
+            tripMeMarker = L.marker(rt.pts[0], { icon: userIcon, zIndexOffset: 1000 }).addTo(tripLayer);
+
+            activeTrip = { it, rt, follow: true, offCount: 0, arrived: false, watchId: null };
+            map.on('dragstart', tripOnDrag);
+
+            document.getElementById('journeySection').style.display = 'none';
+            document.getElementById('tripPanel').style.display = 'block';
+            hideTripAlert();
+            updateTripPanel(0, rt.total, it.duration, projectOnRoute(rt, rt.pts[0][0], rt.pts[0][1]));
+            map.setView(rt.pts[0], 17);
+
+            activeTrip.watchId = navigator.geolocation.watchPosition(onTripPosition,
+                () => showToast('⚠️ Señal GPS débil'),
+                { enableHighAccuracy: true, maximumAge: 1500, timeout: 20000 });
+        }
+
+        function onTripPosition(pos) {
+            if (!activeTrip) return;
+            const lat = pos.coords.latitude, lon = pos.coords.longitude;
+            userPos = { lat, lon };
+            const rt = activeTrip.rt;
+            const proj = projectOnRoute(rt, lat, lon);
+            const projPt = lerpPt(rt.pts[proj.seg], rt.pts[proj.seg + 1], proj.t);
+
+            tripMeMarker.setLatLng([lat, lon]); // tu posición REAL
+            tripDoneLayer.setLatLngs(rt.pts.slice(0, proj.seg + 1).concat([projPt]));
+            tripRestLayer.setLatLngs([projPt].concat(rt.pts.slice(proj.seg + 1)));
+
+            const frac = Math.max(0, Math.min(1, proj.along / rt.total));
+            const remDist = Math.max(0, rt.total - proj.along);
+            const remSecs = Math.round(activeTrip.it.duration * (1 - frac));
+            updateTripPanel(frac, remDist, remSecs, proj);
+
+            if (activeTrip.follow) map.panTo([lat, lon], { animate: true, duration: .5 });
+
+            const distToDest = getDistance(lat, lon, journeyDest.lat, journeyDest.lon);
+            if (!activeTrip.arrived && (remDist < 25 || distToDest < 30)) { tripArrived(); return; }
+
+            if (proj.dist > 70) {
+                if (++activeTrip.offCount >= 2) showTripAlert(`Te has desviado ~${Math.round(proj.dist)} m de la ruta.`);
+            } else { activeTrip.offCount = 0; hideTripAlert(); }
+
+            if (arState.open) updateArGuide();
+        }
+
+        function updateTripPanel(frac, remDist, remSecs, proj) {
+            document.getElementById('tripFill').style.width = (frac * 100).toFixed(0) + '%';
+            document.getElementById('tripPct').innerText = Math.round(frac * 100) + '%';
+            document.getElementById('tripRemDist').innerText = fmtDist(remDist);
+            document.getElementById('tripRemTime').innerText = remSecs >= 60 ? Math.round(remSecs / 60) + ' min' : Math.max(0, Math.round(remSecs)) + ' s';
+            document.getElementById('tripNext').innerHTML = nextStepHTML(proj);
+        }
+
+        function nextStepHTML(proj) {
+            const rt = activeTrip.rt, it = activeTrip.it;
+            const leg = it.legs[rt.legIdx[proj.seg]];
+            if (!leg) return '';
+            if (!leg.transitLeg) {
+                const nextTransit = it.legs.slice(rt.legIdx[proj.seg] + 1).find(l => l.transitLeg);
+                if (nextTransit) {
+                    const c = nextTransit.routeColor ? '#' + nextTransit.routeColor : '#0a84ff';
+                    return `🚶 Camina hasta <b>${esc(nextTransit.from.name)}</b> y sube al <span class="trip-next-badge" style="background:${c}">${esc(nextTransit.routeShortName || nextTransit.mode)}</span>`;
+                }
+                return `🚶 Sigue caminando hasta <b>${esc(journeyDest.name)}</b>`;
+            }
+            const c = leg.routeColor ? '#' + leg.routeColor : '#0a84ff';
+            return `<span class="trip-next-badge" style="background:${c}">${esc(leg.routeShortName || leg.mode)}</span> Baja en <b>${esc(leg.to.name)}</b>`;
+        }
+
+        function showTripAlert(msg) { document.getElementById('tripAlertText').innerText = msg; document.getElementById('tripAlert').style.display = 'flex'; }
+        function hideTripAlert() { document.getElementById('tripAlert').style.display = 'none'; }
+
+        function tripArrived() {
+            if (!activeTrip) return;
+            activeTrip.arrived = true;
+            document.getElementById('tripFill').style.width = '100%';
+            document.getElementById('tripPct').innerText = '100%';
+            document.getElementById('tripRemDist').innerText = '0 m';
+            document.getElementById('tripRemTime').innerText = '—';
+            document.getElementById('tripNext').innerHTML = `🎉 <b>¡Has llegado a ${esc(journeyDest.name)}!</b>`;
+            hideTripAlert();
+            showToast('🎉 ¡Has llegado!');
+            if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+            if (tripDoneLayer) tripDoneLayer.setLatLngs(activeTrip.rt.pts);
+            if (tripRestLayer) tripRestLayer.setLatLngs([]);
+            if (activeTrip.watchId != null) { navigator.geolocation.clearWatch(activeTrip.watchId); activeTrip.watchId = null; }
+        }
+
+        function tripOnDrag() {
+            if (!activeTrip) return;
+            activeTrip.follow = false;
+            document.getElementById('tripRecenter').style.display = 'flex';
+        }
+        function recenterTrip() {
+            if (!activeTrip) return;
+            activeTrip.follow = true;
+            document.getElementById('tripRecenter').style.display = 'none';
+            if (userPos) map.setView([userPos.lat, userPos.lon], 17, { animate: true });
+        }
+        function replanFromTrip() {
+            const dest = journeyDest;
+            stopTrip();
+            if (dest) planTo(dest.lat, dest.lon, dest.name);
+        }
+        function stopTrip(quiet) {
+            if (activeTrip) {
+                if (activeTrip.watchId != null) navigator.geolocation.clearWatch(activeTrip.watchId);
+                map.off('dragstart', tripOnDrag);
+            }
+            activeTrip = null;
+            if (tripLayer) tripLayer.clearLayers();
+            document.getElementById('tripPanel').style.display = 'none';
+            document.getElementById('tripRecenter').style.display = 'none';
+            if (!quiet && journeyDest) document.getElementById('journeySection').style.display = 'block';
+        }
+
+        /* ===================== 16. MODO AR / CÁMARA ===================== */
+        // "Siempre la mejor experiencia disponible": cámara + brújula (AR) → solo cámara → lista.
+        const AR_HALF_FOV = 33; // grados visibles a cada lado del centro
+        const arState = { open: false, stream: null, heading: null, stops: [], labels: new Map(),
+                          watchId: null, timer: null, orientHandler: null, tier: null, destEl: null };
+
+        function bearingTo(lat1, lon1, lat2, lon2) {
+            const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180, Δλ = (lon2 - lon1) * Math.PI / 180;
+            const y = Math.sin(Δλ) * Math.cos(φ2);
+            const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+            return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+        const relAngle = a => ((a % 360) + 540) % 360 - 180; // normaliza a [-180,180]
+
+        function setArHint(msg) {
+            const h = document.getElementById('arHint');
+            if (!msg) { h.style.display = 'none'; return; }
+            h.style.display = 'block'; h.innerText = msg;
+        }
+
+        async function openAR() {
+            if (arState.open) return;
+            document.getElementById('arOverlay').style.display = 'block';
+            arState.open = true;
+            const fb = document.getElementById('arFallback');
+            fb.style.display = 'none'; fb.innerHTML = '';
+            document.getElementById('arTier').innerText = '…';
+            setArHint('Preparando cámara…');
+
+            const canCamera = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+            const canOrient = typeof window.DeviceOrientationEvent !== 'undefined';
+
+            ensureArData(); // en paralelo: GPS + paradas cercanas
+
+            const orientOk = canOrient ? await enableOrientation() : false;
+
+            let cameraOk = false;
+            if (canCamera) {
+                try {
+                    arState.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+                    const v = document.getElementById('arVideo');
+                    v.srcObject = arState.stream;
+                    await v.play().catch(() => {});
+                    cameraOk = true;
+                } catch (e) { cameraOk = false; }
+            }
+
+            if (cameraOk && orientOk) { arState.tier = 'compass'; document.getElementById('arTier').innerText = 'AR'; }
+            else if (cameraOk) { arState.tier = 'camera'; document.getElementById('arTier').innerText = 'Cámara'; }
+            else { arState.tier = 'list'; document.getElementById('arTier').innerText = 'Lista'; }
+
+            if (arState.tier === 'compass') {
+                setArHint('Apunta el móvil a tu alrededor 📡');
+                setTimeout(() => { if (arState.open && arState.tier === 'compass') setArHint(null); }, 5000);
+            } else if (arState.tier === 'camera') {
+                setArHint('Sin brújula en este equipo: te muestro las paradas cercanas en lista.');
+                arPanelFallback();
+            } else {
+                setArHint('Sin acceso a cámara: te muestro las paradas cercanas en lista.');
+                arPanelFallback();
+            }
+
+            arState.timer = setInterval(renderArScene, 100);
+            renderArScene();
+        }
+
+        // Permiso + escucha de la orientación del dispositivo (brújula)
+        function enableOrientation() {
+            return new Promise(resolve => {
+                const attach = () => {
+                    let done = false;
+                    const handler = e => {
+                        let h = null, isWebkit = false;
+                        if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) { h = e.webkitCompassHeading; isWebkit = true; }
+                        else if (typeof e.alpha === 'number' && e.alpha !== null) h = 360 - e.alpha;
+                        if (h == null || isNaN(h)) return;
+                        if (!isWebkit) {
+                            const sa = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+                            h = (h + sa) % 360;
+                        }
+                        arState.heading = (h + 360) % 360;
+                        if (!done) { done = true; resolve(true); }
+                    };
+                    arState.orientHandler = handler;
+                    window.addEventListener('deviceorientationabsolute', handler, true);
+                    window.addEventListener('deviceorientation', handler, true);
+                    setTimeout(() => { if (!done) resolve(false); }, 1400);
+                };
+                const DOE = window.DeviceOrientationEvent;
+                if (DOE && typeof DOE.requestPermission === 'function') {
+                    DOE.requestPermission().then(s => s === 'granted' ? attach() : resolve(false)).catch(() => resolve(false));
+                } else attach();
+            });
+        }
+
+        async function ensureArData() {
+            let p;
+            try { p = await ensureOrigin(); }
+            catch (e) { setArHint('Necesito tu ubicación para situar las paradas.'); return; }
+            userPos = p;
+            if (nearbyStops && nearbyStops.length) {
+                arState.stops = nearbyStops
+                    .map(s => ({ ...s, dist: getDistance(p.lat, p.lon, s.lat, s.lon) }))
+                    .filter(s => s.dist <= 400).sort((a, b) => a.dist - b.dist).slice(0, 12);
+            }
+            if (!arState.stops.length) arState.stops = await gatherArStops(p.lat, p.lon);
+            if (arState.watchId == null && navigator.geolocation) {
+                arState.watchId = navigator.geolocation.watchPosition(
+                    pos => { userPos = { lat: pos.coords.latitude, lon: pos.coords.longitude }; },
+                    () => {}, { enableHighAccuracy: true, maximumAge: 2000 });
+            }
+            if (arState.tier === 'camera' || arState.tier === 'list') arPanelFallback();
+        }
+
+        async function gatherArStops(lat, lon) {
+            const [busRes, metroRes] = await Promise.allSettled([findBusStops(lat, lon), getMetroStations()]);
+            const bus = (busRes.status === 'fulfilled' ? busRes.value : []).map(s => ({ ...s, dist: getDistance(lat, lon, s.lat, s.lon) }));
+            const metro = (metroRes.status === 'fulfilled' ? metroRes.value : []).map(s => ({ type: 'metro', id: s.id, name: s.name, lines: s.lines, lat: s.lat, lon: s.lon, dist: getDistance(lat, lon, s.lat, s.lon) }));
+            const tram = TRAM_STOPS.map(([name, slat, slon, out, ret]) => ({ type: 'tram', name, out, ret, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }));
+            return [...bus, ...metro, ...tram].filter(s => s.dist <= 400).sort((a, b) => a.dist - b.dist).slice(0, 12);
+        }
+
+        function buildArLabel(s) {
+            const el = document.createElement('div');
+            el.className = 'ar-label';
+            el.innerHTML = `<div class="ar-label-pin">${MODE_ICON[s.type] || '📍'}</div>
+                <div class="ar-label-card">
+                    <div class="ar-label-name">${esc(s.name)}</div>
+                    <div class="ar-label-meta">${MODE_NAME[s.type]}</div>
+                    <div class="ar-label-arr" style="display:none"></div>
+                </div>`;
+            el.addEventListener('click', () => toggleArArrivals(s, el));
+            return el;
+        }
+
+        async function toggleArArrivals(s, el) {
+            const box = el.querySelector('.ar-label-arr');
+            if (box.dataset.open === '1') { box.style.display = 'none'; box.dataset.open = '0'; return; }
+            box.style.display = 'block'; box.dataset.open = '1'; box.innerHTML = '⏳';
+            try {
+                let deps = [];
+                if (s.type === 'bus') deps = await fetchBusArrivals(s);
+                else if (s.type === 'metro') deps = await fetchMetroArrivals(s);
+                else deps = await fetchTramArrivals(s);
+                box.innerHTML = deps.length
+                    ? deps.slice(0, 3).map(d => `<div><span class="l" style="background:${d.color}">${esc(d.line)}</span>${d.mins <= 0 ? 'ahora' : d.mins + ' min'}</div>`).join('')
+                    : 'Sin próximos pasos ahora';
+            } catch { box.innerHTML = 'No disponible'; }
+        }
+
+        function renderArScene() {
+            if (!arState.open) return;
+            const scene = document.getElementById('arScene');
+            const up = userPos;
+            const haveCompass = up && arState.heading != null && arState.tier === 'compass';
+            const seen = new Set();
+
+            arState.stops.forEach((s, idx) => {
+                const id = 'ar_' + idx;
+                seen.add(id);
+                let el = arState.labels.get(id);
+                if (!el) { el = buildArLabel(s); arState.labels.set(id, el); scene.appendChild(el); }
+                if (!haveCompass) { el.style.display = 'none'; return; }
+                const dist = getDistance(up.lat, up.lon, s.lat, s.lon);
+                el.querySelector('.ar-label-meta').innerText = `${MODE_NAME[s.type]} · ${fmtDist(dist)}`;
+                const rel = relAngle(bearingTo(up.lat, up.lon, s.lat, s.lon) - arState.heading);
+                if (Math.abs(rel) > AR_HALF_FOV + 8) { el.style.display = 'none'; return; }
+                el.style.display = 'flex';
+                const near = Math.max(0, Math.min(1, 1 - dist / 400));
+                el.style.left = Math.max(6, Math.min(94, 50 + (rel / AR_HALF_FOV) * 50)) + '%';
+                el.style.top = Math.max(24, Math.min(76, 42 + near * 20 + (idx % 3) * 3)) + '%';
+                el.style.zIndex = String(1000 + Math.round(near * 100));
+                el.querySelector('.ar-label-card').style.transform = `scale(${(0.75 + near * 0.4).toFixed(2)})`;
+            });
+            arState.labels.forEach((el, id) => { if (!seen.has(id)) { el.remove(); arState.labels.delete(id); } });
+
+            // Marcador flotante del destino
+            let de = arState.destEl;
+            if (journeyDest && haveCompass) {
+                if (!de) {
+                    de = document.createElement('div'); de.className = 'ar-label';
+                    de.innerHTML = `<div class="ar-label-pin">🎯</div>
+                        <div class="ar-label-card" style="border-color:#ff375f">
+                            <div class="ar-label-name">${esc(journeyDest.name)}</div>
+                            <div class="ar-label-meta ar-dest-dist"></div>
+                        </div>`;
+                    scene.appendChild(de); arState.destEl = de;
+                }
+                const rel = relAngle(bearingTo(up.lat, up.lon, journeyDest.lat, journeyDest.lon) - arState.heading);
+                de.querySelector('.ar-dest-dist').innerText = 'Destino · ' + fmtDist(getDistance(up.lat, up.lon, journeyDest.lat, journeyDest.lon));
+                if (Math.abs(rel) > AR_HALF_FOV + 8) de.style.display = 'none';
+                else { de.style.display = 'flex'; de.style.left = Math.max(6, Math.min(94, 50 + (rel / AR_HALF_FOV) * 50)) + '%'; de.style.top = '30%'; de.style.zIndex = '1500'; }
+            } else if (de) de.style.display = 'none';
+
+            updateArGuide();
+        }
+
+        // Flecha grande que apunta al siguiente punto del trayecto activo
+        function updateArGuide() {
+            const g = document.getElementById('arGuide');
+            if (!arState.open) return;
+            if (!activeTrip || arState.heading == null || arState.tier !== 'compass' || !userPos) { g.style.display = 'none'; return; }
+            const rt = activeTrip.rt;
+            const proj = projectOnRoute(rt, userPos.lat, userPos.lon);
+            const leg = activeTrip.it.legs[rt.legIdx[proj.seg]];
+            let target = leg && leg.to && leg.to.lat ? [leg.to.lat, leg.to.lon] : [journeyDest.lat, journeyDest.lon];
+            const rel = relAngle(bearingTo(userPos.lat, userPos.lon, target[0], target[1]) - arState.heading);
+            const dist = getDistance(userPos.lat, userPos.lon, target[0], target[1]);
+            g.style.display = 'block';
+            document.getElementById('arGuideArrow').style.transform = `rotate(${rel}deg)`;
+            const label = leg && leg.transitLeg ? `baja en ${esc(leg.to.name)}` : (leg ? 'siguiente punto' : 'destino');
+            document.getElementById('arGuideText').innerText = `${fmtDist(dist)} · ${label}`;
+        }
+
+        function arPanelFallback() {
+            const fb = document.getElementById('arFallback');
+            fb.innerHTML = arState.stops.length
+                ? '<h3>📍 Paradas a tu alrededor</h3>' + arState.stops.map(s =>
+                    `<div class="ar-fb-stop"><span style="font-size:22px">${MODE_ICON[s.type] || '📍'}</span><div><b>${esc(s.name)}</b><br><small>${MODE_NAME[s.type]}</small></div><span class="d">${fmtDist(s.dist)}</span></div>`).join('')
+                : '<h3>Buscando paradas cercanas…</h3>';
+            fb.style.display = 'flex';
+        }
+
+        function closeAR() {
+            arState.open = false;
+            if (arState.timer) { clearInterval(arState.timer); arState.timer = null; }
+            if (arState.orientHandler) {
+                window.removeEventListener('deviceorientationabsolute', arState.orientHandler, true);
+                window.removeEventListener('deviceorientation', arState.orientHandler, true);
+                arState.orientHandler = null;
+            }
+            if (arState.watchId != null) { navigator.geolocation.clearWatch(arState.watchId); arState.watchId = null; }
+            if (arState.stream) { arState.stream.getTracks().forEach(t => t.stop()); arState.stream = null; }
+            document.getElementById('arVideo').srcObject = null;
+            arState.labels.forEach(el => el.remove()); arState.labels.clear();
+            if (arState.destEl) { arState.destEl.remove(); arState.destEl = null; }
+            document.getElementById('arScene').innerHTML = '';
+            document.getElementById('arGuide').style.display = 'none';
+            document.getElementById('arFallback').style.display = 'none';
+            document.getElementById('arOverlay').style.display = 'none';
+            arState.heading = null;
         }
     </script>
 </body>
