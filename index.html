@@ -262,6 +262,61 @@
         }
         .toast.show { transform: translateX(-50%) translateY(0); }
 
+        /* ---------- PLANIFICADOR ---------- */
+        .dest-wrap { position: relative; margin-bottom: 14px; }
+        .dest-input {
+            width: 100%; padding: 13px 42px 13px 14px; border: 1px solid var(--border); border-radius: 12px;
+            font-size: 1rem; font-weight: 600; background: var(--card); color: var(--text);
+            outline: none; transition: border-color .15s; font-family: inherit;
+        }
+        .dest-input:focus { border-color: var(--blue); }
+        .dest-clear {
+            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; font-size: 1.1rem; color: var(--text-faint);
+            cursor: pointer; padding: 6px; display: none;
+        }
+        .dest-suggestions {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1500;
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: var(--shadow-lg); overflow: hidden; display: none;
+        }
+        .dest-suggestion { padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+        .dest-suggestion:last-child { border-bottom: none; }
+        .dest-suggestion:hover, .dest-suggestion:active { background: color-mix(in srgb, var(--text) 5%, var(--card)); }
+        .dest-sug-name { font-weight: 700; font-size: .92rem; }
+        .dest-sug-detail { font-size: .78rem; color: var(--text-faint); margin-top: 1px; }
+
+        .journey-head {
+            display: flex; align-items: center; gap: 10px; background: var(--card);
+            border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+            padding: 12px 16px; margin-bottom: 12px;
+        }
+        .journey-head-title { flex: 1; min-width: 0; font-weight: 800; font-size: .98rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .journey-head-sub { font-size: .75rem; color: var(--text-faint); font-weight: 600; }
+        .journey-head button { background: none; border: none; font-size: 1.15rem; cursor: pointer; color: var(--text-soft); padding: 4px; }
+
+        .jcard { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; animation: slideUp .3s ease both; }
+        .jcard.best { border-color: color-mix(in srgb, var(--green) 55%, var(--border)); }
+        .jcard-main { padding: 13px 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .jcard-top { display: flex; align-items: baseline; gap: 10px; }
+        .jcard-mins { font-size: 1.45rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+        .jcard-mins small { font-size: .75rem; font-weight: 600; color: var(--text-faint); }
+        .jcard-times { font-size: .85rem; color: var(--text-soft); font-weight: 600; flex: 1; }
+        .jcard-best-tag { font-size: .68rem; font-weight: 800; color: var(--green); text-transform: uppercase; letter-spacing: .5px; }
+        .jlegs { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 9px; }
+        .jleg-badge {
+            color: #fff; border-radius: 7px; padding: 3px 8px; font-size: .82rem; font-weight: 900;
+            box-shadow: inset 0 -2px 0 rgba(0,0,0,.18); letter-spacing: -.3px;
+        }
+        .jleg-walk { font-size: .78rem; color: var(--text-faint); font-weight: 700; white-space: nowrap; }
+        .jleg-sep { color: var(--text-faint); font-size: .7rem; }
+        .jcard-detail { display: none; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--text) 3%, var(--card)); padding: 12px 16px; }
+        .jstep { display: flex; gap: 12px; padding: 8px 0; align-items: flex-start; }
+        .jstep-icon { flex-shrink: 0; width: 44px; text-align: center; }
+        .jstep-body { flex: 1; min-width: 0; font-size: .86rem; color: var(--text-soft); }
+        .jstep-body b { color: var(--text); }
+        .jstep-sub { font-size: .76rem; color: var(--text-faint); margin-top: 1px; }
+
         footer { text-align: center; font-size: .72rem; color: var(--text-faint); padding: 26px 0 10px; }
     </style>
 </head>
@@ -285,12 +340,31 @@
             <div id="map"></div>
             <button class="map-fab" onclick="searchGPS()" title="Buscar transporte cerca de mí" aria-label="Buscar transporte cerca de mí">📍</button>
         </div>
-        <div class="map-hint">💡 Mantén pulsado cualquier punto del mapa para explorar esa zona</div>
+        <div class="map-hint">💡 Mantén pulsado cualquier punto del mapa para ver cómo llegar o explorar la zona</div>
 
         <div class="controls">
             <input type="number" id="stopCode" placeholder="Nº parada de bus" inputmode="numeric" onkeydown="if(event.key==='Enter')searchManual()">
             <button class="btn btn-search" onclick="searchManual()">Buscar</button>
             <button class="btn btn-gps" onclick="searchGPS()">📍 Cerca de mí</button>
+        </div>
+
+        <div class="dest-wrap">
+            <input type="text" id="destInput" class="dest-input" placeholder="🧭 ¿A dónde vas? Busca una dirección o lugar…"
+                   autocomplete="off" oninput="onDestInput()" onkeydown="if(event.key==='Escape')clearDest()">
+            <button class="dest-clear" id="destClear" onclick="clearDest()" aria-label="Borrar destino">✕</button>
+            <div class="dest-suggestions" id="destSuggestions"></div>
+        </div>
+
+        <div id="journeySection" style="display:none">
+            <div class="journey-head">
+                <div style="flex:1; min-width:0">
+                    <div class="journey-head-title" id="journeyTitle"></div>
+                    <div class="journey-head-sub" id="journeySub"></div>
+                </div>
+                <button onclick="replanJourney()" title="Recalcular" aria-label="Recalcular rutas">🔄</button>
+                <button onclick="closeJourney()" title="Cerrar rutas" aria-label="Cerrar rutas">✕</button>
+            </div>
+            <div id="journeyResults" class="bus-list"></div>
         </div>
 
         <div id="favSection" style="display:none">
@@ -422,13 +496,15 @@
             routeLayer = L.featureGroup().addTo(map);
             darkScheme.addEventListener('change', () => tileLayer.setUrl(tileURL()));
 
-            // Mantener pulsado (o clic derecho) en el mapa = explorar esa zona
+            // Mantener pulsado (o clic derecho) en el mapa = explorar esa zona o ir a ella
             map.on('contextmenu', e => {
                 const { lat, lng } = e.latlng;
                 L.popup({ closeButton: false })
                     .setLatLng(e.latlng)
-                    .setContent(`<div class="explore-pop"><b>¿Explorar esta zona?</b><br>
+                    .setContent(`<div class="explore-pop">
                         <button class="btn btn-search" style="padding:8px 14px; font-size:.85rem"
+                            onclick="map.closePopup(); planTo(${lat.toFixed(6)}, ${lng.toFixed(6)}, 'este punto del mapa')">🧭 Cómo llegar aquí</button><br>
+                        <button class="btn btn-gps" style="padding:8px 14px; font-size:.85rem; margin-top:6px"
                             onclick="map.closePopup(); exploreAt(${lat.toFixed(6)}, ${lng.toFixed(6)}, false)">🔍 Ver transporte aquí</button></div>`)
                     .openOn(map);
             });
@@ -1028,6 +1104,219 @@
             const stops = TRAM_LINES[String(lineId)];
             if (!stops) throw new Error('Línea no disponible');
             return stops.map(([name, lat, lon]) => ({ name, lat, lon, hl: name === stopName }));
+        }
+
+        // --- 11B. PLANIFICADOR DE RUTAS (TMB Planner: bus + metro + tram) ---
+        let journeyDest = null;   // { name, lat, lon }
+        let journeyItins = [];
+        let destDebounce = null;
+        let destMarkerLayer = null;
+
+        const fmtTime = ts => new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+        // Decodificador estándar de polilíneas codificadas (Google/OTP)
+        function decodePolyline(str) {
+            const pts = []; let index = 0, lat = 0, lon = 0;
+            while (index < str.length) {
+                for (const which of [0, 1]) {
+                    let result = 0, shift = 0, b;
+                    do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+                    const delta = (result & 1) ? ~(result >> 1) : (result >> 1);
+                    if (which === 0) lat += delta; else lon += delta;
+                }
+                pts.push([lat / 1e5, lon / 1e5]);
+            }
+            return pts;
+        }
+
+        // Autocompletado de destino (Photon/Komoot: gratis, sin key)
+        function onDestInput() {
+            const q = document.getElementById('destInput').value.trim();
+            document.getElementById('destClear').style.display = q ? 'block' : 'none';
+            clearTimeout(destDebounce);
+            if (q.length < 3) { document.getElementById('destSuggestions').style.display = 'none'; return; }
+            destDebounce = setTimeout(async () => {
+                try {
+                    const res = await fetch(`https://photon.komoot.io/api?q=${encodeURIComponent(q)}&lat=41.39&lon=2.17&limit=8`);
+                    const data = await res.json();
+                    const seen = new Set();
+                    window._destSugs = (data.features || [])
+                        .map(f => {
+                            const p = f.properties;
+                            const detail = [p.street ? `${p.street}${p.housenumber ? ' ' + p.housenumber : ''}` : null, p.district, p.city]
+                                .filter(Boolean).join(' · ');
+                            return { name: p.name || p.street || 'Sin nombre', detail, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
+                        })
+                        // solo área metropolitana de Barcelona
+                        .filter(s => s.lat > 41.15 && s.lat < 41.65 && s.lon > 1.85 && s.lon < 2.45)
+                        .filter(s => { const k = s.name + '|' + s.detail; if (seen.has(k)) return false; seen.add(k); return true; })
+                        .slice(0, 5);
+                    renderSuggestions();
+                } catch (e) { /* geocoder caído: silencio */ }
+            }, 350);
+        }
+        function renderSuggestions() {
+            const box = document.getElementById('destSuggestions');
+            const sugs = window._destSugs || [];
+            box.style.display = sugs.length ? 'block' : 'none';
+            box.innerHTML = sugs.map((s, i) => `
+                <div class="dest-suggestion" onclick="pickSuggestion(${i})">
+                    <div class="dest-sug-name">📍 ${esc(s.name)}</div>
+                    ${s.detail ? `<div class="dest-sug-detail">${esc(s.detail)}</div>` : ''}
+                </div>`).join('');
+        }
+        function pickSuggestion(i) {
+            const s = (window._destSugs || [])[i];
+            if (!s) return;
+            document.getElementById('destSuggestions').style.display = 'none';
+            document.getElementById('destInput').value = s.name;
+            planTo(s.lat, s.lon, s.name);
+        }
+        function clearDest() {
+            document.getElementById('destInput').value = '';
+            document.getElementById('destClear').style.display = 'none';
+            document.getElementById('destSuggestions').style.display = 'none';
+        }
+
+        // Origen: tu GPS (lo pide si aún no lo tenemos)
+        function ensureOrigin() {
+            return new Promise((resolve, reject) => {
+                if (userPos) return resolve(userPos);
+                if (!navigator.geolocation) return reject(new Error('Este dispositivo no tiene GPS.'));
+                navigator.geolocation.getCurrentPosition(pos => {
+                    userPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                    userMarkerLayer.clearLayers();
+                    L.marker([userPos.lat, userPos.lon], { icon: userIcon, zIndexOffset: 500 }).addTo(userMarkerLayer).bindPopup("<b>Estás aquí</b>");
+                    resolve(userPos);
+                }, () => reject(new Error('Necesito tu ubicación para calcular la ruta. Activa el GPS y vuelve a intentarlo.')),
+                { timeout: 10000, maximumAge: 60000 });
+            });
+        }
+
+        async function planTo(lat, lon, name) {
+            hideError();
+            stopCountdown();
+            document.getElementById('stopCard').style.display = 'none';
+            document.getElementById('results').innerHTML = '';
+            setLoading('🧭 Calculando las mejores rutas…');
+            try {
+                const origin = await ensureOrigin();
+                journeyDest = { name: name || 'Destino', lat, lon };
+                const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
+                    `&fromPlace=${origin.lat},${origin.lon}&toPlace=${lat},${lon}` +
+                    `&mode=TRANSIT,WALK&numItineraries=4&locale=es`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('El planificador no responde. Inténtalo de nuevo.');
+                const data = await res.json();
+                journeyItins = (data.plan && data.plan.itineraries) || [];
+                if (journeyItins.length === 0) throw new Error('No se ha encontrado ninguna ruta en transporte público hasta ahí.');
+                journeyItins.sort((a, b) => a.endTime - b.endTime); // la que llega antes, primera
+                setLoading(null);
+                renderJourneys();
+                toggleJourneyDetail(0, document.querySelector('#journeyResults .jcard'), true);
+            } catch (err) {
+                setLoading(null);
+                document.getElementById('journeySection').style.display = 'none';
+                showError(esc(err.message));
+            }
+        }
+
+        function legStrip(it) {
+            return it.legs.map(l => {
+                if (!l.transitLeg) return `<span class="jleg-walk">🚶${Math.max(1, Math.round(l.duration / 60))}'</span>`;
+                const color = l.routeColor ? '#' + l.routeColor : (l.mode === 'BUS' ? '#da291c' : '#008e78');
+                return `<span class="jleg-badge" style="background:${color}">${esc(l.routeShortName || l.mode)}</span>`;
+            }).join('<span class="jleg-sep">›</span>');
+        }
+
+        function renderJourneys() {
+            document.getElementById('journeySection').style.display = 'block';
+            document.getElementById('journeyTitle').innerText = `🧭 A ${journeyDest.name}`;
+            document.getElementById('journeySub').innerText = `Desde tu ubicación · ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+            document.getElementById('journeyResults').innerHTML = journeyItins.map((it, i) => `
+                <div class="jcard ${i === 0 ? 'best' : ''}">
+                    <div class="jcard-main" onclick="toggleJourneyDetail(${i}, this.parentElement)">
+                        <div class="jcard-top">
+                            <div class="jcard-mins">${Math.round(it.duration / 60)}<small> min</small></div>
+                            <div class="jcard-times">${fmtTime(it.startTime)} → ${fmtTime(it.endTime)}</div>
+                            ${i === 0 ? '<div class="jcard-best-tag">⚡ Llega antes</div>' : ''}
+                        </div>
+                        <div class="jlegs">${legStrip(it)}</div>
+                    </div>
+                    <div class="jcard-detail"></div>
+                </div>`).join('');
+        }
+
+        function journeyStepsHTML(it) {
+            return it.legs.map(l => {
+                if (!l.transitLeg) {
+                    return `<div class="jstep">
+                        <div class="jstep-icon">🚶</div>
+                        <div class="jstep-body">Camina <b>${fmtDist(l.distance)}</b> hasta <b>${esc(l.to.name === 'Destination' ? journeyDest.name : l.to.name)}</b>
+                            <div class="jstep-sub">${Math.max(1, Math.round(l.duration / 60))} min</div></div>
+                    </div>`;
+                }
+                const color = l.routeColor ? '#' + l.routeColor : '#da291c';
+                const nStops = (l.intermediateStops ? l.intermediateStops.length + 1 : null);
+                return `<div class="jstep">
+                    <div class="jstep-icon"><span class="jleg-badge" style="background:${color}">${esc(l.routeShortName || l.mode)}</span></div>
+                    <div class="jstep-body"><b>${esc(l.from.name)}</b> → <b>${esc(l.to.name)}</b>
+                        <div class="jstep-sub">dirección ${esc(l.headsign || '')} · ${nStops ? nStops + ' paradas · ' : ''}${Math.round(l.duration / 60)} min · ${fmtTime(l.startTime)}</div></div>
+                </div>`;
+            }).join('');
+        }
+
+        function toggleJourneyDetail(i, cardEl, forceOpen = false) {
+            const it = journeyItins[i];
+            if (!it || !cardEl) return;
+            const detail = cardEl.querySelector('.jcard-detail');
+            const isOpen = detail.style.display === 'block';
+            document.querySelectorAll('.jcard-detail').forEach(el => el.style.display = 'none');
+            if (isOpen && !forceOpen) { routeLayer.clearLayers(); return; }
+            detail.innerHTML = journeyStepsHTML(it);
+            detail.style.display = 'block';
+            drawJourney(it);
+        }
+
+        const destIcon = L.divIcon({
+            className: '',
+            html: '<div style="font-size:30px; filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))">🎯</div>',
+            iconSize: [30, 30], iconAnchor: [15, 26]
+        });
+
+        function drawJourney(it) {
+            routeLayer.clearLayers();
+            if (!destMarkerLayer) destMarkerLayer = L.layerGroup().addTo(map);
+            destMarkerLayer.clearLayers();
+            L.marker([journeyDest.lat, journeyDest.lon], { icon: destIcon, zIndexOffset: 600 })
+                .addTo(destMarkerLayer).bindPopup(`<b>${esc(journeyDest.name)}</b>`);
+            it.legs.forEach(l => {
+                if (!l.legGeometry || !l.legGeometry.points) return;
+                const pts = decodePolyline(l.legGeometry.points);
+                if (!l.transitLeg) {
+                    L.polyline(pts, { color: '#5f6670', weight: 4, opacity: .7, dashArray: '2,8' }).addTo(routeLayer);
+                } else {
+                    const color = l.routeColor ? '#' + l.routeColor : '#da291c';
+                    L.polyline(pts, { color, weight: 5, opacity: .85 }).addTo(routeLayer);
+                    L.circleMarker(pts[0], { radius: 6, color, fillColor: '#fff', fillOpacity: 1, weight: 3 })
+                        .bindPopup(`<b>${esc(l.from.name)}</b>`).addTo(routeLayer);
+                }
+            });
+            try { map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] }); } catch {}
+        }
+
+        function closeJourney() {
+            document.getElementById('journeySection').style.display = 'none';
+            journeyDest = null;
+            journeyItins = [];
+            routeLayer.clearLayers();
+            if (destMarkerLayer) destMarkerLayer.clearLayers();
+            clearDest();
+            if (currentStop) fetchArrivals(currentStop);
+        }
+
+        function replanJourney() {
+            if (journeyDest) planTo(journeyDest.lat, journeyDest.lon, journeyDest.name);
         }
 
         // --- 12. BÚSQUEDA MANUAL (paradas de bus) ---
