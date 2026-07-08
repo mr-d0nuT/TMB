@@ -9,9 +9,11 @@ Formato compacto para la app:
   "heads": ["destino", ...],
   "stops": [[stop_id, nombre, lat, lon], ...],
   "dates": {"YYYYMMDD": [svcIdx, ...], ...},          # 30 días vista
-  "deps":  {stopIdx: [[lineIdx, svcIdx, depMin, headIdx, arrEndMin], ...]}
+  "trips": [[lineIdx, svcIdx, headIdx, [[stopIdx, depMin], ...]], ...]
 }
 Los minutos son desde medianoche del día de servicio (pueden superar 1440).
+La app deriva el índice de salidas por parada y puede componer trayectos
+origen→destino recorriendo la secuencia de paradas de cada viaje.
 """
 import csv, io, json, sys, zipfile, urllib.request, collections
 from datetime import date, timedelta
@@ -91,41 +93,44 @@ def main():
 
     heads, head_idx = [], {}
     stops, stop_idx = [], {}
-    deps = collections.defaultdict(list)
+    out_trips = []
 
     for tid, seq in trip_stops.items():
         t = trips[tid]
         if t["service_id"] not in svc_idx:
             continue
         seq.sort()
-        last_arr = next((x[3] for x in reversed(seq) if x[3] is not None), None)
-        if last_arr is None:
-            continue
         head = t.get("trip_headsign") or stops_meta.get(seq[-1][1], ("?",))[0]
         if head not in head_idx:
             head_idx[head] = len(heads)
             heads.append(head)
-        li = line_idx[t["route_id"]]
-        si_svc = svc_idx[t["service_id"]]
-        for _, sid, dep, _arr in seq[:-1]:  # en la última parada ya no se sube
-            if sid not in stops_meta or dep is None:
+        pattern = []
+        prev_dep = None
+        for _, sid, dep, arr in seq:
+            if sid not in stops_meta:
                 continue
+            when = dep if dep is not None else arr
+            if when is None:
+                when = prev_dep  # parada sin timepoint: hereda la anterior
+            if when is None:
+                continue
+            prev_dep = when
             if sid not in stop_idx:
                 stop_idx[sid] = len(stops)
                 name, lat, lon = stops_meta[sid]
                 stops.append([sid, name, lat, lon])
-            deps[stop_idx[sid]].append([li, si_svc, dep, head_idx[head], last_arr])
-
-    for v in deps.values():
-        v.sort(key=lambda x: x[2])
+            pattern.append([stop_idx[sid], when])
+        if len(pattern) < 2:
+            continue
+        out_trips.append([line_idx[t["route_id"]], svc_idx[t["service_id"]], head_idx[head], pattern])
 
     out = {"v": today.isoformat(), "lines": lines, "heads": heads,
-           "stops": stops, "dates": dates, "deps": deps}
+           "stops": stops, "dates": dates, "trips": out_trips}
     data = json.dumps(out, ensure_ascii=False, separators=(",", ":"))
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(data)
     print(f"{OUT}: {len(data)} bytes · {len(stops)} paradas · {len(lines)} líneas · "
-          f"{sum(len(v) for v in deps.values())} salidas", file=sys.stderr)
+          f"{len(out_trips)} viajes", file=sys.stderr)
 
 
 if __name__ == "__main__":

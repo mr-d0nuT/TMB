@@ -1422,8 +1422,20 @@
             if (hispanoData) return hispanoData;
             const res = await fetch('./hispano-igualadina.json');
             if (!res.ok) throw new Error('Horarios de la Hispano Igualadina no disponibles.');
-            hispanoData = await res.json();
-            return hispanoData;
+            const d = await res.json();
+            // deriva el índice de salidas por parada desde los viajes:
+            // stopIdx -> [[lineIdx, svcIdx, depMin, headIdx, arrFinalMin], ...]
+            d._deps = {};
+            (d.trips || []).forEach(([li, svc, hi, pat]) => {
+                const arrEnd = pat[pat.length - 1][1];
+                for (let k = 0; k < pat.length - 1; k++) { // en la última ya no se sube
+                    const [si, dep] = pat[k];
+                    (d._deps[si] = d._deps[si] || []).push([li, svc, dep, hi, arrEnd]);
+                }
+            });
+            Object.values(d._deps).forEach(v => v.sort((a, b) => a[2] - b[2]));
+            hispanoData = d;
+            return d;
         }
         const hbusLine = short => short.replace(/^L0+/, 'L');
 
@@ -1444,7 +1456,7 @@
             const dayStart = new Date(svcDay); dayStart.setHours(0, 0, 0, 0);
 
             const groups = new Map();
-            (d.deps[String(idx)] || []).forEach(x => {
+            (d._deps[idx] || []).forEach(x => {
                 const [li, svc, dep, hi, arrEnd] = x;
                 if (!active.has(svc) || dep < nowMin || dep > nowMin + 480) return;
                 const k = li + '|' + hi;
@@ -1693,9 +1705,18 @@
                     return true;
                 });
                 // El planner de TMB solo cubre el área metropolitana: fuera de ella
-                // (media distancia: Altafulla, Girona, Tortosa…) montamos rutas de
-                // tren directamente con los horarios de Renfe
-                if (its.length === 0) its = await renfeFallbackJourneys(origin, { lat, lon });
+                // montamos rutas con los horarios de Renfe (media distancia) y de la
+                // Hispano Igualadina (bus interurbano), y fusionamos lo que salga
+                if (its.length === 0) {
+                    const [rF, hF] = await Promise.allSettled([
+                        renfeFallbackJourneys(origin, { lat, lon }),
+                        hbusFallbackJourneys(origin, { lat, lon })
+                    ]);
+                    its = [
+                        ...(rF.status === 'fulfilled' ? rF.value : []),
+                        ...(hF.status === 'fulfilled' ? hF.value : [])
+                    ];
+                }
                 if (its.length === 0) throw new Error('No se ha encontrado ninguna ruta en transporte público hasta ahí.');
                 its.sort((a, b) => a.endTime - b.endTime); // la que llega antes, primera
                 journeyItins = its.slice(0, 6);
@@ -1790,6 +1811,116 @@
             }
             all.sort((a, b) => a.endTime - b.endTime);
             return all.slice(0, 5);
+        }
+
+        // Rutas con la Hispano Igualadina para destinos fuera del área del planner:
+        // recorre los viajes del día buscando uno que pase por una parada cercana
+        // al origen y después por una cercana al destino
+        async function hbusFallbackJourneys(origin, dest) {
+            let d;
+            try { d = await ensureHispano(); } catch { return []; }
+            const near = (pt, max, n) => d.stops
+                .map((s, i) => ({ i, name: s[1], lat: s[2], lon: s[3], dist: getDistance(pt.lat, pt.lon, s[2], s[3]) }))
+                .filter(s => s.dist <= max)
+                .sort((a, b) => a.dist - b.dist)
+                .slice(0, n);
+            // origen con radio amplio: los interurbanos salen de pocos puntos (Sants,
+            // pl. Espanya, Diagonal…) y el acceso lejano se encadena luego con el planner
+            const oNear = new Map(near(origin, 4500, 25).map(s => [s.i, s]));
+            const dNear = new Map(near(dest, 2000, 10).map(s => [s.i, s]));
+            if (!oNear.size || !dNear.size) return [];
+
+            const now = new Date();
+            let nowMin = now.getHours() * 60 + now.getMinutes();
+            let svcDay = new Date(now);
+            if (now.getHours() < 4) { svcDay = new Date(now.getTime() - 864e5); nowMin += 1440; }
+            const dateKey = svcDay.getFullYear() + String(svcDay.getMonth() + 1).padStart(2, '0') + String(svcDay.getDate()).padStart(2, '0');
+            const active = new Set(d.dates[dateKey] || []);
+            const dayStart = new Date(svcDay); dayStart.setHours(0, 0, 0, 0);
+
+            const its = [], seen = new Set();
+            d.trips.forEach(([li, svc, hi, pat]) => {
+                if (!active.has(svc)) return;
+                let oStop = null, oDep = 0;
+                for (const [si, tm] of pat) {
+                    if (!oStop) {
+                        if (oNear.has(si)) { oStop = oNear.get(si); oDep = tm; }
+                        continue;
+                    }
+                    if (!dNear.has(si)) continue;
+                    // viaje válido: sube en oStop (tras caminar) y baja aquí
+                    if (oDep < nowMin || oDep > nowMin + 480) return;
+                    const dStop = dNear.get(si);
+                    const sig = li + '@' + oDep + '@' + si;
+                    if (seen.has(sig)) return;
+                    seen.add(sig);
+                    const dep = dayStart.getTime() + oDep * 60000;
+                    const arr = dayStart.getTime() + tm * 60000;
+                    const legs = [];
+                    if (oStop.dist > 80) legs.push({
+                        transitLeg: false, mode: 'WALK', duration: oStop.dist / 1.25, distance: oStop.dist,
+                        from: { name: 'Origen' }, to: { name: oStop.name },
+                        startTime: dep - (oStop.dist / 1.25) * 1000, endTime: dep,
+                        _pts: [[origin.lat, origin.lon], [oStop.lat, oStop.lon]]
+                    });
+                    legs.push({
+                        transitLeg: true, mode: 'BUS',
+                        routeShortName: hbusLine(d.lines[li][0]), routeColor: '7b3fa0',
+                        headsign: d.heads[hi], agencyName: 'Hispano Igualadina',
+                        from: { name: oStop.name }, to: { name: dStop.name },
+                        startTime: dep, endTime: arr, duration: (arr - dep) / 1000,
+                        intermediateStops: null,
+                        _pts: [[oStop.lat, oStop.lon], [dStop.lat, dStop.lon]]
+                    });
+                    if (dStop.dist > 80) legs.push({
+                        transitLeg: false, mode: 'WALK', duration: dStop.dist / 1.25, distance: dStop.dist,
+                        from: { name: dStop.name }, to: { name: 'Destination' },
+                        startTime: arr, endTime: arr + (dStop.dist / 1.25) * 1000,
+                        _pts: [[dStop.lat, dStop.lon], [dest.lat, dest.lon]]
+                    });
+                    its.push({
+                        startTime: legs[0].startTime, endTime: legs[legs.length - 1].endTime,
+                        duration: (legs[legs.length - 1].endTime - legs[0].startTime) / 1000, legs,
+                        _oStop: oStop
+                    });
+                    return;
+                }
+            });
+            its.sort((a, b) => a.endTime - b.endTime);
+
+            // Acceso multimodal: si la parada de subida queda a más de 1,2 km, intenta
+            // llegar hasta ella con el planner de TMB (metro/bus) y encadena las etapas
+            const shortlist = its.slice(0, 5);
+            const accessCache = {};
+            const upgraded = [];
+            for (const it of shortlist) {
+                const o = it._oStop;
+                delete it._oStop;
+                if (!o || o.dist <= 1200) { upgraded.push(it); continue; }
+                if (!(o.i in accessCache)) {
+                    try {
+                        const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
+                            `&fromPlace=${origin.lat},${origin.lon}&toPlace=${o.lat},${o.lon}` +
+                            `&mode=TRANSIT,WALK&numItineraries=2&locale=es`;
+                        const res = await fetch(url);
+                        const data = res.ok ? await res.json() : null;
+                        const cand = (((data || {}).plan || {}).itineraries || [])
+                            .filter(x => x.legs.some(l => l.transitLeg))
+                            .sort((a, b) => a.endTime - b.endTime)[0];
+                        accessCache[o.i] = cand || null;
+                    } catch { accessCache[o.i] = null; }
+                }
+                const acc = accessCache[o.i];
+                const busIdx = it.legs.findIndex(l => l.transitLeg);
+                if (acc && acc.endTime + 60000 <= it.legs[busIdx].startTime) {
+                    const legs = [...acc.legs, ...it.legs.slice(busIdx)];
+                    upgraded.push({ startTime: acc.startTime, endTime: it.endTime, duration: (it.endTime - acc.startTime) / 1000, legs });
+                } else {
+                    upgraded.push(it); // a pie: mejor que nada, y el usuario decide
+                }
+            }
+            upgraded.sort((a, b) => a.endTime - b.endTime);
+            return upgraded.slice(0, 4);
         }
 
         function legStrip(it) {
