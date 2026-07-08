@@ -2494,20 +2494,40 @@
             arState.raf = requestAnimationFrame(arLoop);
         }
 
+        // Rumbo de la cámara a partir de alpha/beta/gamma: proyección horizontal del
+        // eje -Z del dispositivo (a donde mira la cámara trasera). Funciona con el
+        // móvil en vertical (pose AR), en horizontal o inclinado — sin apaños de
+        // ángulo de pantalla. Devuelve null si la cámara mira al suelo/cielo.
+        function cameraHeading(alpha, beta, gamma) {
+            const d = Math.PI / 180;
+            const cA = Math.cos(alpha * d), sA = Math.sin(alpha * d);
+            const cB = Math.cos(beta * d), sB = Math.sin(beta * d);
+            const cG = Math.cos(gamma * d), sG = Math.sin(gamma * d);
+            const vx = -cA * sG - sA * sB * cG; // este
+            const vy = -sA * sG + cA * sB * cG; // norte
+            if (Math.hypot(vx, vy) < 0.15) return null; // casi vertical: rumbo indefinido
+            return (Math.atan2(vx, vy) * 180 / Math.PI + 360) % 360;
+        }
+
         // Permiso + escucha de la orientación del dispositivo (brújula)
         function enableOrientation() {
             return new Promise(resolve => {
                 const attach = () => {
                     let done = false;
                     const handler = e => {
-                        let h = null, isWebkit = false;
-                        if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) { h = e.webkitCompassHeading; isWebkit = true; }
-                        else if (typeof e.alpha === 'number' && e.alpha !== null) h = 360 - e.alpha;
-                        if (h == null || isNaN(h)) return;
-                        if (!isWebkit) {
-                            const sa = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
-                            h = (h + sa) % 360;
+                        let h = null;
+                        if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+                            h = e.webkitCompassHeading; // iOS: ya es rumbo de brújula
+                        } else if (typeof e.alpha === 'number' && e.alpha !== null) {
+                            const isAbsolute = e.type === 'deviceorientationabsolute' || e.absolute === true;
+                            // En Android disparan AMBOS eventos con referencias distintas:
+                            // en cuanto llega uno absoluto (brújula real), los relativos
+                            // (giroscopio, referencia arbitraria) se ignoran para siempre
+                            if (isAbsolute) arState.hasAbsolute = true;
+                            else if (arState.hasAbsolute) return;
+                            h = cameraHeading(e.alpha, e.beta || 0, e.gamma || 0);
                         }
+                        if (h == null || isNaN(h)) return;
                         arState.headingRaw = (h + 360) % 360; // el bucle rAF lo suaviza
                         if (!done) { done = true; resolve(true); }
                     };
@@ -2646,7 +2666,11 @@
                 if (!el) { el = buildArLabel(s); arState.labels.set(id, el); scene.appendChild(el); }
                 if (!haveCompass) { el.style.display = 'none'; return; }
                 const rel = relAngle(bearingTo(up.lat, up.lon, s.lat, s.lon) - arState.heading);
-                if (Math.abs(rel) > AR_HALF_FOV + 6) { el.style.display = 'none'; return; }
+                // histéresis del borde: entra en el cono a ±(FOV+4)° pero no sale
+                // hasta ±(FOV+14)°, así no parpadea al oscilar justo en el límite
+                const limit = el._vis ? AR_HALF_FOV + 14 : AR_HALF_FOV + 4;
+                if (Math.abs(rel) > limit) { el._vis = false; el.style.display = 'none'; return; }
+                el._vis = true;
                 vis.push({ s, el, rel, idx, dist: getDistance(up.lat, up.lon, s.lat, s.lon) });
             });
             // borra etiquetas de paradas que ya no existen
@@ -2737,7 +2761,7 @@
         function closeAR() {
             arState.open = false;
             if (arState.raf) { cancelAnimationFrame(arState.raf); arState.raf = null; }
-            arState.headingRaw = null; arState.pos = null; arState.focusId = null;
+            arState.headingRaw = null; arState.pos = null; arState.focusId = null; arState.hasAbsolute = false;
             if (arState.timer) { clearInterval(arState.timer); arState.timer = null; }
             if (arState.orientHandler) {
                 window.removeEventListener('deviceorientationabsolute', arState.orientHandler, true);
