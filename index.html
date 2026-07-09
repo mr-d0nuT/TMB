@@ -1725,8 +1725,9 @@
                                 .filter(Boolean).join(' · ');
                             return { name: p.name || p.street || 'Sin nombre', detail, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
                         })
-                        // solo área metropolitana de Barcelona
-                        .filter(s => s.lat > 41.15 && s.lat < 41.65 && s.lon > 1.85 && s.lon < 2.45)
+                        // toda Cataluña: hasta donde llegan Rodalies/media distancia, FGC
+                        // y la Hispano (Photon ya prioriza lo cercano a Barcelona)
+                        .filter(s => s.lat > 40.5 && s.lat < 42.9 && s.lon > 0.15 && s.lon < 3.34)
                         .filter(s => { const k = s.name + '|' + s.detail; if (seen.has(k)) return false; seen.add(k); return true; })
                         .slice(0, 5);
                     renderSuggestions();
