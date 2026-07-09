@@ -1541,15 +1541,24 @@
             }
         }
 
+        // Topología de una línea de bus (paradas con orden y sentido), cacheada
+        const busLineCache = new Map();
+        async function busLineStops(lineCode) {
+            if (busLineCache.has(lineCode)) return busLineCache.get(lineCode);
+            const res = await fetch(`https://api.tmb.cat/v1/transit/linies/bus/${lineCode}/parades?${TMB_AUTH}`);
+            if (!res.ok) throw new Error('Ruta no disponible');
+            const data = await res.json();
+            busLineCache.set(lineCode, data);
+            return data;
+        }
+
         // El routeId del iBus incluye línea y sentido: "2151" = línea 215, sentido 1
         async function busItinerary({ routeId, stopCode }) {
             const rid = parseInt(routeId, 10);
             const lineCode = Math.floor(rid / 10);
             const sentit = rid % 10;
 
-            const res = await fetch(`https://api.tmb.cat/v1/transit/linies/bus/${lineCode}/parades?${TMB_AUTH}`);
-            if (!res.ok) throw new Error('Ruta no disponible');
-            const data = await res.json();
+            const data = await busLineStops(lineCode);
 
             const current = data.features.find(f => f.properties.CODI_PARADA == stopCode && f.properties.SENTIT == sentit)
                          || data.features.find(f => f.properties.CODI_PARADA == stopCode);
@@ -1696,6 +1705,12 @@
                 // fuera caminatas puras si hay alternativas con transporte
                 const withTransit = its.filter(it => it.legs.some(l => l.transitLeg));
                 if (withTransit.length) its = withTransit;
+                else if (its.length) {
+                    // el planner solo propone andar (poda el bus en trayectos cortos):
+                    // componemos los buses directos nosotros y los añadimos a la caminata
+                    const direct = await shortHopBusJourneys(origin, { lat, lon });
+                    its = [...its.slice(0, 1), ...direct];
+                }
                 // sin duplicados (misma secuencia de líneas y paradas de subida)
                 const seen = new Set();
                 its = its.filter(it => {
@@ -1811,6 +1826,89 @@
             }
             all.sort((a, b) => a.endTime - b.endTime);
             return all.slice(0, 5);
+        }
+
+        // Buses directos para trayectos cortos: el planner de TMB poda el transporte
+        // cuando andar "gana", pero el usuario quiere ver los buses igualmente.
+        // Se componen con iBus (tiempo real + línea/sentido) y la topología de línea.
+        async function shortHopBusJourneys(origin, dest) {
+            if (getDistance(origin.lat, origin.lon, dest.lat, dest.lon) > 3500) return [];
+            try {
+                const [oStops, dNear] = await Promise.all([
+                    tmbBusStopsNear(origin.lat, origin.lon, 350, 5),
+                    tmbBusStopsNear(dest.lat, dest.lon, 350, 10)
+                ]);
+                const dCodes = new Map(dNear.map(s => [String(s.code), s]));
+                if (!oStops.length || !dCodes.size) return [];
+
+                const arrivals = await Promise.allSettled(oStops.map(async o => ({ o, buses: await fetchBusArrivals(o) })));
+                const its = [], seenLine = new Set();
+                for (const r of arrivals) {
+                    if (r.status !== 'fulfilled') continue;
+                    const { o, buses } = r.value;
+                    for (const b of buses) {
+                        // routeId = línea·10 + índice; el sentido en la topología son
+                        // letras (A/T), no números, así que se deriva de la propia parada
+                        const lineCode = Math.floor(parseInt(b.itin.routeId, 10) / 10);
+                        const oWalkMs = (o.dist / 1.25) * 1000;
+                        if (b.arriveAt - Date.now() < oWalkMs - 60000) continue; // no llegas a este: prueba el siguiente pase
+                        let data;
+                        try { data = await busLineStops(lineCode); } catch { continue; }
+                        // la parada de origen puede figurar en varios sentidos: prueba todos
+                        const oFs = data.features.filter(f => f.properties.CODI_PARADA == o.code);
+                        let oF = null, dF = null;
+                        for (const cand of oFs) {
+                            const sentit = cand.properties.SENTIT;
+                            const down = data.features
+                                .filter(f => f.properties.SENTIT === sentit && f.properties.ORDRE > cand.properties.ORDRE && dCodes.has(String(f.properties.CODI_PARADA)))
+                                .sort((a, b2) => a.properties.ORDRE - b2.properties.ORDRE)[0];
+                            if (down) { oF = cand; dF = down; break; }
+                        }
+                        if (!oF || !dF) continue;
+                        const sentit = oF.properties.SENTIT;
+                        const key = lineCode + '@' + sentit;
+                        if (seenLine.has(key)) continue;
+                        seenLine.add(key);
+                        const dStop = dCodes.get(String(dF.properties.CODI_PARADA));
+                        const seq = data.features
+                            .filter(f => f.properties.SENTIT === sentit && f.properties.ORDRE >= oF.properties.ORDRE && f.properties.ORDRE <= dF.properties.ORDRE)
+                            .sort((a, b2) => a.properties.ORDRE - b2.properties.ORDRE)
+                            .map(f => [f.geometry.coordinates[1], f.geometry.coordinates[0]]);
+                        let rideM = 0;
+                        for (let i = 1; i < seq.length; i++) rideM += getDistance(seq[i-1][0], seq[i-1][1], seq[i][0], seq[i][1]);
+                        const rideMs = Math.max(60000, (rideM / 3.6) * 1000 + seq.length * 12000); // ~13 km/h + 12 s por parada
+                        const dep = b.arriveAt, arr2 = dep + rideMs;
+                        const legs = [];
+                        if (o.dist > 80) legs.push({
+                            transitLeg: false, mode: 'WALK', duration: o.dist / 1.25, distance: o.dist,
+                            from: { name: 'Origen' }, to: { name: o.name },
+                            startTime: dep - oWalkMs, endTime: dep,
+                            _pts: [[origin.lat, origin.lon], [o.lat, o.lon]]
+                        });
+                        legs.push({
+                            transitLeg: true, mode: 'BUS', _est: true,
+                            routeShortName: b.line, routeColor: b.color.replace('#', ''),
+                            headsign: b.dest, agencyName: 'TMB',
+                            from: { name: o.name }, to: { name: dStop.name },
+                            startTime: dep, endTime: arr2, duration: rideMs / 1000,
+                            intermediateStops: new Array(Math.max(0, seq.length - 2)),
+                            _pts: seq
+                        });
+                        if (dStop.dist > 80) legs.push({
+                            transitLeg: false, mode: 'WALK', duration: dStop.dist / 1.25, distance: dStop.dist,
+                            from: { name: dStop.name }, to: { name: 'Destination' },
+                            startTime: arr2, endTime: arr2 + (dStop.dist / 1.25) * 1000,
+                            _pts: [[dStop.lat, dStop.lon], [dest.lat, dest.lon]]
+                        });
+                        its.push({
+                            startTime: legs[0].startTime, endTime: legs[legs.length - 1].endTime,
+                            duration: (legs[legs.length - 1].endTime - legs[0].startTime) / 1000, legs
+                        });
+                    }
+                }
+                its.sort((a, b) => a.endTime - b.endTime);
+                return its.slice(0, 4);
+            } catch { return []; }
         }
 
         // Rutas con la Hispano Igualadina para destinos fuera del área del planner:
@@ -1963,7 +2061,7 @@
                 return `<div class="jstep">
                     <div class="jstep-icon"><span class="jleg-badge" style="background:${color}">${esc(l.routeShortName || l.mode)}</span></div>
                     <div class="jstep-body"><b>${esc(l.from.name)}</b> → <b>${esc(l.to.name)}</b>
-                        <div class="jstep-sub">dirección ${esc(l.headsign || '')} · ${nStops ? nStops + ' paradas · ' : ''}${Math.round(l.duration / 60)} min · ${fmtTime(l.startTime)}</div></div>
+                        <div class="jstep-sub">dirección ${esc(l.headsign || '')} · ${nStops ? nStops + ' paradas · ' : ''}${Math.round(l.duration / 60)} min · ${fmtTime(l.startTime)}${l._est ? ' · llegada ≈' + fmtTime(l.endTime) : ''}</div></div>
                 </div>`;
             }).join('');
         }
@@ -2054,6 +2152,41 @@
             } catch {
                 return cached ? cached.s : []; // sin red: usa caché aunque caduque
             }
+        }
+
+        // Todas las paradas de bus de TMB (código oficial + coords), cacheadas 7 días.
+        // Fuente fiable y con CORS para el planificador de trayectos cortos, evitando
+        // depender de Overpass (lento y con límite de peticiones).
+        let tmbBusStopsMem = null;
+        async function getTmbBusStops() {
+            if (tmbBusStopsMem) return tmbBusStopsMem;
+            const CACHE_KEY = 'busbcn_tmbstops_v1';
+            let cached = null;
+            try { cached = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch {}
+            if (cached && Date.now() - cached.t < 7 * 864e5) { tmbBusStopsMem = cached.s; return cached.s; }
+            try {
+                const res = await fetch(`https://api.tmb.cat/v1/transit/parades?${TMB_AUTH}`);
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                const s = data.features.map(f => [
+                    f.properties.CODI_PARADA, f.properties.NOM_PARADA,
+                    +f.geometry.coordinates[1].toFixed(5), +f.geometry.coordinates[0].toFixed(5)
+                ]);
+                try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), s })); } catch {}
+                tmbBusStopsMem = s;
+                return s;
+            } catch {
+                return cached ? cached.s : [];
+            }
+        }
+        // Paradas de bus TMB cerca de un punto, ordenadas por distancia
+        async function tmbBusStopsNear(lat, lon, maxDist, n) {
+            const all = await getTmbBusStops();
+            return all
+                .map(([code, name, slat, slon]) => ({ code, name, lat: slat, lon: slon, dist: getDistance(lat, lon, slat, slon) }))
+                .filter(s => s.dist <= maxDist)
+                .sort((a, b) => a.dist - b.dist)
+                .slice(0, n);
         }
 
         // --- 14. BÚSQUEDA POR GPS ---
