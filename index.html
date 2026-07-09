@@ -358,7 +358,19 @@
         .trip-actions { display: flex; gap: 10px; margin-top: 12px; }
         .trip-actions button { flex: 1; padding: 11px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-weight: 800; font-size: .9rem; cursor: pointer; }
         .trip-actions .trip-ar { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+        .trip-actions .trip-alt { background: #da291c; color: #fff; border-color: #da291c; box-shadow: 0 3px 10px rgba(218,41,28,.35); }
         .trip-actions .trip-end { background: color-mix(in srgb, var(--primary) 12%, var(--card)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, transparent); }
+
+        /* ---- Alternativas más rápidas durante el trayecto ---- */
+        #tripAltPanel { display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; max-height: 42vh; overflow-y: auto; }
+        .trip-alt-note { font-size: .86rem; font-weight: 600; color: var(--text-soft); padding: 4px 2px; }
+        .trip-alt-card { border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; margin-bottom: 10px; background: color-mix(in srgb, var(--text) 3%, var(--card)); }
+        .trip-alt-head { display: flex; align-items: baseline; gap: 8px; font-size: .9rem; font-weight: 700; }
+        .trip-alt-save { color: var(--green); font-weight: 900; }
+        .trip-alt-strip { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: 8px 0; }
+        .trip-alt-from { font-size: .8rem; color: var(--text-faint); font-weight: 600; margin-bottom: 9px; }
+        .trip-alt-go { width: 100%; padding: 9px; border: none; border-radius: 10px; background: #da291c; color: #fff; font-weight: 800; font-size: .85rem; cursor: pointer; }
+        .trip-alt-go:active { transform: scale(.98); }
 
         /* ---- Modo AR / cámara ---- */
         #arOverlay { position: fixed; inset: 0; z-index: 4000; display: none; background: #000; overflow: hidden; }
@@ -565,8 +577,10 @@
         </div>
         <div class="trip-actions">
             <button class="trip-ar" onclick="openAR()">📷 AR</button>
+            <button class="trip-alt" onclick="tripAlternatives()">⚡ Alternativa</button>
             <button class="trip-end" onclick="stopTrip()">■ Finalizar</button>
         </div>
+        <div id="tripAltPanel"></div>
     </div>
 
     <!-- Overlay de realidad aumentada -->
@@ -1686,52 +1700,7 @@
             try {
                 const origin = await ensureOrigin();
                 journeyDest = { name: name || 'Destino', lat, lon };
-                const planReq = async (mode) => {
-                    const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
-                        `&fromPlace=${origin.lat},${origin.lon}&toPlace=${lat},${lon}` +
-                        `&mode=${mode}&numItineraries=4&locale=es`;
-                    const res = await fetch(url);
-                    if (!res.ok) return [];
-                    const data = await res.json();
-                    return (data.plan && data.plan.itineraries) || [];
-                };
-                // El planificador prima el metro al optimizar la llegada y descarta
-                // los buses: pedimos también rutas solo-bus y las fusionamos
-                const [rAll, rBus] = await Promise.allSettled([planReq('TRANSIT,WALK'), planReq('BUS,WALK')]);
-                let its = [
-                    ...(rAll.status === 'fulfilled' ? rAll.value : []),
-                    ...(rBus.status === 'fulfilled' ? rBus.value : [])
-                ];
-                // fuera caminatas puras si hay alternativas con transporte
-                const withTransit = its.filter(it => it.legs.some(l => l.transitLeg));
-                if (withTransit.length) its = withTransit;
-                else if (its.length) {
-                    // el planner solo propone andar (poda el bus en trayectos cortos):
-                    // componemos los buses directos nosotros y los añadimos a la caminata
-                    const direct = await shortHopBusJourneys(origin, { lat, lon });
-                    its = [...its.slice(0, 1), ...direct];
-                }
-                // sin duplicados (misma secuencia de líneas y paradas de subida)
-                const seen = new Set();
-                its = its.filter(it => {
-                    const sig = it.legs.filter(l => l.transitLeg).map(l => (l.routeShortName || '') + '@' + (l.from.stopId || '')).join('>');
-                    if (seen.has(sig)) return false;
-                    seen.add(sig);
-                    return true;
-                });
-                // El planner de TMB solo cubre el área metropolitana: fuera de ella
-                // montamos rutas con los horarios de Renfe (media distancia) y de la
-                // Hispano Igualadina (bus interurbano), y fusionamos lo que salga
-                if (its.length === 0) {
-                    const [rF, hF] = await Promise.allSettled([
-                        renfeFallbackJourneys(origin, { lat, lon }),
-                        hbusFallbackJourneys(origin, { lat, lon })
-                    ]);
-                    its = [
-                        ...(rF.status === 'fulfilled' ? rF.value : []),
-                        ...(hF.status === 'fulfilled' ? hF.value : [])
-                    ];
-                }
+                const its = await gatherJourneys(origin, { lat, lon });
                 if (its.length === 0) throw new Error('No se ha encontrado ninguna ruta en transporte público hasta ahí.');
                 its.sort((a, b) => a.endTime - b.endTime); // la que llega antes, primera
                 journeyItins = its.slice(0, 6);
@@ -1743,6 +1712,76 @@
                 document.getElementById('journeySection').style.display = 'none';
                 showError(esc(err.message));
             }
+        }
+
+        // Reúne itinerarios de todas las fuentes: planner de TMB (dos peticiones),
+        // trenes de FGC compuestos por nosotros y, si no sale nada con transporte,
+        // Renfe media distancia + Hispano Igualadina. Con whenMs pide rutas que
+        // salgan a partir de esa hora (para las alternativas en pleno trayecto).
+        async function gatherJourneys(origin, dest, whenMs) {
+            const planReq = async (mode) => {
+                let url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
+                    `&fromPlace=${origin.lat},${origin.lon}&toPlace=${dest.lat},${dest.lon}` +
+                    `&mode=${mode}&numItineraries=4&locale=es&showIntermediateStops=true`;
+                if (whenMs) {
+                    const d = new Date(whenMs), p2 = n => String(n).padStart(2, '0');
+                    url += `&date=${p2(d.getMonth() + 1)}-${p2(d.getDate())}-${d.getFullYear()}&time=${p2(d.getHours())}:${p2(d.getMinutes())}`;
+                }
+                const res = await fetch(url);
+                if (!res.ok) return [];
+                const data = await res.json();
+                return (data.plan && data.plan.itineraries) || [];
+            };
+            // El planificador prima el metro al optimizar la llegada y descarta los
+            // buses: pedimos también rutas solo-bus. Y el FGC directo casi nunca lo
+            // propone (prefiere combinaciones enrevesadas), así que componemos sus
+            // trenes aparte con el open data y lo fusionamos todo
+            const [rAll, rBus, rFgc] = await Promise.allSettled([
+                planReq('TRANSIT,WALK'), planReq('BUS,WALK'), fgcJourneys(origin, dest, whenMs)
+            ]);
+            let its = [
+                ...(rAll.status === 'fulfilled' ? rAll.value : []),
+                ...(rBus.status === 'fulfilled' ? rBus.value : []),
+                ...(rFgc.status === 'fulfilled' ? rFgc.value : [])
+            ];
+            // fuera caminatas puras si hay alternativas con transporte
+            const withTransit = its.filter(it => it.legs.some(l => l.transitLeg));
+            if (withTransit.length) its = withTransit;
+            else if (its.length) {
+                // el planner solo propone andar (poda el bus en trayectos cortos):
+                // componemos los buses directos nosotros y los añadimos a la caminata
+                const direct = await shortHopBusJourneys(origin, dest);
+                its = [...its.slice(0, 1), ...direct];
+            }
+            // sin duplicados (misma secuencia de líneas y paradas de subida)
+            const seen = new Set();
+            its = its.filter(it => {
+                const sig = it.legs.filter(l => l.transitLeg).map(l => (l.routeShortName || '') + '@' + (l.from.stopId || '')).join('>');
+                if (seen.has(sig)) return false;
+                seen.add(sig);
+                return true;
+            });
+            // El planner de TMB solo cubre el área metropolitana: fuera de ella
+            // montamos rutas con los horarios de Renfe (media distancia) y de la
+            // Hispano Igualadina (bus interurbano), y fusionamos lo que salga
+            if (!its.some(it => it.legs.some(l => l.transitLeg))) {
+                const [rF, hF] = await Promise.allSettled([
+                    renfeFallbackJourneys(origin, dest),
+                    hbusFallbackJourneys(origin, dest)
+                ]);
+                its = [
+                    ...its,
+                    ...(rF.status === 'fulfilled' ? rF.value : []),
+                    ...(hF.status === 'fulfilled' ? hF.value : [])
+                ];
+            }
+            // pidiendo una salida futura, fuera lo que salga antes de esa hora
+            // (las fuentes propias distintas de FGC solo saben planificar "ahora")
+            if (whenMs) its = its.filter(it => {
+                const t = it.legs.find(l => l.transitLeg);
+                return !t || t.startTime >= whenMs;
+            });
+            return its;
         }
 
         // Rutas solo-tren para destinos fuera del área del planner (media distancia):
@@ -2019,6 +2058,156 @@
             }
             upgraded.sort((a, b) => a.endTime - b.endTime);
             return upgraded.slice(0, 4);
+        }
+
+        // --- Rutas con FGC: se componen con el open data oficial (viajes-de-hoy) y
+        // se fusionan SIEMPRE con el planner, que rara vez propone el tren directo
+        // (p. ej. Pl. Espanya → Santa Coloma de Cervelló) ---
+        function nearestFgc(point, n, maxDist) {
+            return FGC_STATIONS
+                .map(([code, sname, slat, slon]) => ({ code, name: sname, lat: slat, lon: slon, dist: getDistance(point.lat, point.lon, slat, slon) }))
+                .filter(s => s.dist <= maxDist)
+                .sort((a, b) => a.dist - b.dist)
+                .slice(0, n);
+        }
+
+        // Horas GTFS del día de servicio (la madrugada es 24:xx-27:xx del día anterior)
+        function fgcTimeToEpoch(str) {
+            if (!str) return null;
+            const [h, m, s] = str.split(':').map(Number);
+            if (isNaN(h) || isNaN(m)) return null;
+            const day = new Date();
+            if (day.getHours() < 4) day.setDate(day.getDate() - 1);
+            day.setHours(0, 0, 0, 0);
+            return day.getTime() + (h * 3600 + m * 60 + (s || 0)) * 1000;
+        }
+
+        const fgcTimesCache = new Map(); // parent_station → { t, rows }
+        async function fgcStationTimes(code) {
+            const hit = fgcTimesCache.get(code);
+            if (hit && Date.now() - hit.t < 60000) return hit.rows;
+            const now = new Date();
+            let h = now.getHours();
+            if (h < 4) h += 24;
+            const hourFilters = [h, h + 1, h + 2].map(x => `startswith(departure_time,"${String(x).padStart(2, '0')}:")`).join(' OR ');
+            const where = `parent_station="${code}" AND (${hourFilters})`;
+            const url = `${FGC_API}/viajes-de-hoy/records?select=route_short_name,trip_headsign,departure_time,arrival_time,route_color,shape_id,stop_sequence&where=${encodeURIComponent(where)}&order_by=departure_time&limit=100`;
+            const res = await fetch(url);
+            if (!res.ok) return [];
+            const data = await res.json();
+            const rows = data.results || [];
+            fgcTimesCache.set(code, { t: Date.now(), rows });
+            return rows;
+        }
+
+        async function fgcJourneys(origin, dest, whenMs) {
+            const oSts = nearestFgc(origin, 3, 4500);
+            const dSts = nearestFgc(dest, 2, 3000);
+            if (!oSts.length || !dSts.length) return [];
+            const after = whenMs || Date.now();
+
+            const its = [], seen = new Set();
+            for (const oSt of oSts) {
+                for (const dSt of dSts) {
+                    if (oSt.code === dSt.code) continue;
+                    let oRows, dRows;
+                    try { [oRows, dRows] = await Promise.all([fgcStationTimes(oSt.code), fgcStationTimes(dSt.code)]); } catch { continue; }
+                    // El open data no expone trip_id: el mismo tren se casa por patrón
+                    // (línea + destino + trazado) emparejando salidas y llegadas en orden
+                    // FIFO (los trenes de un patrón no se adelantan entre sí). Compartir
+                    // trazado descarta de paso mezclar las redes Vallès / Llobregat-Anoia
+                    const patKey = r => r.route_short_name + '|' + r.trip_headsign + '|' + r.shape_id;
+                    const dByPat = new Map();
+                    dRows.forEach(r => { const k = patKey(r); (dByPat.get(k) || dByPat.set(k, []).get(k)).push(r); });
+                    const oByPat = new Map();
+                    oRows.forEach(r => { const k = patKey(r); if (dByPat.has(k)) (oByPat.get(k) || oByPat.set(k, []).get(k)).push(r); });
+                    const walkO = oSt.dist / 1.25, walkD = dSt.dist / 1.25;
+                    // andando si la estación está cerca; si no, el acceso lo pone
+                    // luego el planner y basta con un margen mínimo razonable
+                    const minLead = (oSt.dist <= 1200 ? walkO : 8 * 60) * 1000;
+                    oByPat.forEach((deps, k) => {
+                        const seqO = deps[0].stop_sequence, seqD = dByPat.get(k)[0].stop_sequence;
+                        if (seqD <= seqO) return; // sentido contrario
+                        const minTravel = (seqD - seqO) * 45000; // filtra llegadas de trenes anteriores a la ventana
+                        const arrTimes = dByPat.get(k).map(r => fgcTimeToEpoch(r.arrival_time || r.departure_time)).filter(Boolean).sort((a, b) => a - b);
+                        deps.sort((a, b) => a.departure_time < b.departure_time ? -1 : 1);
+                        let ai = 0, added = 0;
+                        for (const d of deps) {
+                            const dep = fgcTimeToEpoch(d.departure_time);
+                            if (!dep) continue;
+                            while (ai < arrTimes.length && arrTimes[ai] < dep + minTravel) ai++;
+                            if (ai >= arrTimes.length) break;
+                            const arr = arrTimes[ai++]; // consume siempre: FIFO por tren
+                            if (dep < after + minLead || added >= 2) continue;
+                            const sig = k + '@' + dep;
+                            if (seen.has(sig)) continue;
+                            seen.add(sig); added++;
+                            const legs = [];
+                            if (oSt.dist > 80) legs.push({
+                                transitLeg: false, mode: 'WALK', duration: walkO, distance: oSt.dist,
+                                from: { name: 'Origen' }, to: { name: oSt.name },
+                                startTime: dep - walkO * 1000, endTime: dep,
+                                _pts: [[origin.lat, origin.lon], [oSt.lat, oSt.lon]]
+                            });
+                            legs.push({
+                                transitLeg: true, mode: 'RAIL',
+                                routeShortName: d.route_short_name, routeColor: (d.route_color || 'f07d00'),
+                                headsign: d.trip_headsign, agencyName: 'FGC',
+                                from: { name: oSt.name, stopId: 'fgc:' + oSt.code }, to: { name: dSt.name },
+                                startTime: dep, endTime: arr, duration: (arr - dep) / 1000,
+                                intermediateStops: null,
+                                _pts: [[oSt.lat, oSt.lon], [dSt.lat, dSt.lon]]
+                            });
+                            if (dSt.dist > 80) legs.push({
+                                transitLeg: false, mode: 'WALK', duration: walkD, distance: dSt.dist,
+                                from: { name: dSt.name }, to: { name: 'Destination' },
+                                startTime: arr, endTime: arr + walkD * 1000,
+                                _pts: [[dSt.lat, dSt.lon], [dest.lat, dest.lon]]
+                            });
+                            its.push({
+                                startTime: legs[0].startTime, endTime: legs[legs.length - 1].endTime,
+                                duration: (legs[legs.length - 1].endTime - legs[0].startTime) / 1000,
+                                legs, _oStop: oSt
+                            });
+                        }
+                    });
+                }
+            }
+            its.sort((a, b) => a.endTime - b.endTime);
+
+            // Acceso multimodal: si la estación de subida queda a más de 1,2 km,
+            // intenta llegar hasta ella con el planner de TMB y encadena las etapas
+            const shortlist = its.slice(0, 4);
+            const accessCache = {};
+            const upgraded = [];
+            for (const it of shortlist) {
+                const o = it._oStop;
+                delete it._oStop;
+                if (!o || o.dist <= 1200) { upgraded.push(it); continue; }
+                if (!(o.code in accessCache)) {
+                    try {
+                        const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
+                            `&fromPlace=${origin.lat},${origin.lon}&toPlace=${o.lat},${o.lon}` +
+                            `&mode=TRANSIT,WALK&numItineraries=2&locale=es&showIntermediateStops=true`;
+                        const res = await fetch(url);
+                        const data = res.ok ? await res.json() : null;
+                        const cand = (((data || {}).plan || {}).itineraries || [])
+                            .filter(x => x.legs.some(l => l.transitLeg))
+                            .sort((a, b) => a.endTime - b.endTime)[0];
+                        accessCache[o.code] = cand || null;
+                    } catch { accessCache[o.code] = null; }
+                }
+                const acc = accessCache[o.code];
+                const railIdx = it.legs.findIndex(l => l.transitLeg);
+                if (acc && acc.endTime + 60000 <= it.legs[railIdx].startTime) {
+                    const legs = [...acc.legs, ...it.legs.slice(railIdx)];
+                    upgraded.push({ startTime: acc.startTime, endTime: it.endTime, duration: (it.endTime - acc.startTime) / 1000, legs });
+                } else {
+                    upgraded.push(it); // a pie: mejor que nada, y el usuario decide
+                }
+            }
+            upgraded.sort((a, b) => a.endTime - b.endTime);
+            return upgraded.slice(0, 3);
         }
 
         function legStrip(it) {
@@ -2424,6 +2613,7 @@
 
             document.getElementById('journeySection').style.display = 'none';
             document.getElementById('tripPanel').style.display = 'block';
+            document.getElementById('tripAltPanel').style.display = 'none';
             hideTripAlert();
             updateTripPanel(0, rt.total, it.duration, projectOnRoute(rt, rt.pts[0][0], rt.pts[0][1]));
             map.setView(rt.pts[0], 17);
@@ -2448,6 +2638,8 @@
             const frac = Math.max(0, Math.min(1, proj.along / rt.total));
             const remDist = Math.max(0, rt.total - proj.along);
             const remSecs = Math.round(activeTrip.it.duration * (1 - frac));
+            activeTrip.lastProj = proj;
+            activeTrip.lastRemSecs = remSecs;
             updateTripPanel(frac, remDist, remSecs, proj);
 
             if (activeTrip.follow) map.panTo([lat, lon], { animate: true, duration: .5 });
@@ -2529,8 +2721,115 @@
             activeTrip = null;
             if (tripLayer) tripLayer.clearLayers();
             document.getElementById('tripPanel').style.display = 'none';
+            document.getElementById('tripAltPanel').style.display = 'none';
             document.getElementById('tripRecenter').style.display = 'none';
             if (!quiet && journeyDest) document.getElementById('journeySection').style.display = 'block';
+        }
+
+        /* ---- Botón "Alternativa": rutas más rápidas desde la próxima parada ---- */
+        let tripAlts = null; // { from, list }
+
+        // ¿Desde dónde y a qué hora puede el usuario cambiar de ruta? La próxima
+        // parada del tramo en curso, o aquí mismo si va andando
+        function tripNextStop() {
+            const rt = activeTrip.rt, it = activeTrip.it;
+            const proj = activeTrip.lastProj || projectOnRoute(rt, rt.pts[0][0], rt.pts[0][1]);
+            const li = rt.legIdx[proj.seg];
+            const leg = it.legs[li];
+            const now = Date.now();
+            if (!leg || !leg.transitLeg) {
+                const here = userPos || { lat: rt.pts[proj.seg][0], lon: rt.pts[proj.seg][1] };
+                return { lat: here.lat, lon: here.lon, name: 'tu posición', when: now, legIdx: li, walking: true };
+            }
+            // primera parada intermedia que quede por delante (si el planner las dio)
+            const ahead = (leg.intermediateStops || []).filter(s =>
+                s.lat && projectOnRoute(rt, s.lat, s.lon).along > proj.along + 40);
+            if (ahead.length) {
+                const s = ahead[0];
+                return { lat: s.lat, lon: s.lon, name: s.name, when: Math.max(now + 45000, s.arrival || 0), legIdx: li };
+            }
+            // sin intermedias (tramos compuestos): el próximo transbordo o bajada
+            const end = (leg._pts && leg._pts[leg._pts.length - 1]) ||
+                (leg.to.lat != null ? [leg.to.lat, leg.to.lon] : null);
+            if (!end) return null;
+            return { lat: end[0], lon: end[1], name: leg.to.name, when: Math.max(now + 60000, leg.endTime), legIdx: li };
+        }
+
+        async function tripAlternatives() {
+            if (!activeTrip || !journeyDest) return;
+            const panel = document.getElementById('tripAltPanel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; } // segundo toque: cerrar
+            panel.style.display = 'block';
+            panel.innerHTML = '<div class="trip-alt-note">🔎 Buscando rutas más rápidas desde la próxima parada…</div>';
+            try {
+                const from = tripNextStop();
+                if (!from) throw new Error();
+                const curEta = Date.now() + (activeTrip.lastRemSecs != null ? activeTrip.lastRemSecs : activeTrip.it.duration) * 1000;
+                // la secuencia de líneas que queda del trayecto actual, para no re-proponerla
+                const lineSig = it => it.legs.filter(l => l.transitLeg).map(l => l.routeShortName || l.mode).join('>');
+                const curSig = lineSig({ legs: activeTrip.it.legs.slice(from.legIdx) });
+                let alts = await gatherJourneys({ lat: from.lat, lon: from.lon }, journeyDest, from.when);
+                alts = alts
+                    .filter(it => it.endTime <= curEta - 120000) // solo si ahorra ≥ 2 min
+                    .filter(it => lineSig(it) !== curSig)
+                    .sort((a, b) => a.endTime - b.endTime)
+                    .slice(0, 3);
+                if (!activeTrip) return; // el usuario finalizó mientras buscábamos
+                tripAlts = { from, list: alts };
+                if (!alts.length) {
+                    panel.innerHTML = `<div class="trip-alt-note">✅ Ya vas por la ruta más rápida hasta <b>${esc(journeyDest.name)}</b>.</div>`;
+                    return;
+                }
+                panel.innerHTML = alts.map((it, i) => {
+                    const save = Math.round((curEta - it.endTime) / 60000);
+                    const t1 = it.legs.find(l => l.transitLeg);
+                    return `
+                    <div class="trip-alt-card">
+                        <div class="trip-alt-head">Llegas a las ${fmtTime(it.endTime)} <span class="trip-alt-save">−${save} min</span></div>
+                        <div class="trip-alt-strip">${legStrip(it)}</div>
+                        <div class="trip-alt-from">${from.walking ? 'Desde donde estás' : `Bájate en <b>${esc(from.name)}</b>`}${t1 ? ` · ${esc(t1.routeShortName || t1.mode)} sale a las ${fmtTime(t1.startTime)}` : ''}</div>
+                        <button class="trip-alt-go" onclick="switchTripTo(${i})">Cambiar a esta ruta</button>
+                    </div>`;
+                }).join('');
+            } catch {
+                panel.innerHTML = '<div class="trip-alt-note">⚠️ No se han podido calcular alternativas ahora mismo.</div>';
+            }
+        }
+
+        function switchTripTo(i) {
+            if (!activeTrip || !tripAlts || !tripAlts.list[i]) return;
+            const alt = tripAlts.list[i];
+            const from = tripAlts.from;
+            const rt = activeTrip.rt;
+            const proj = activeTrip.lastProj || projectOnRoute(rt, rt.pts[0][0], rt.pts[0][1]);
+            const legs = [...alt.legs];
+            // antepone lo que queda del tramo en curso hasta la parada de bajada,
+            // para que la línea y el progreso sigan continuos desde donde estás
+            if (!from.walking) {
+                const cur = activeTrip.it.legs[from.legIdx];
+                const projPt = lerpPt(rt.pts[proj.seg], rt.pts[proj.seg + 1], proj.t);
+                let bestJ = proj.seg + 1, bestD = Infinity;
+                for (let j = proj.seg + 1; j < rt.pts.length; j++) {
+                    const d = getDistance(rt.pts[j][0], rt.pts[j][1], from.lat, from.lon);
+                    if (d < bestD) { bestD = d; bestJ = j; }
+                }
+                legs.unshift({
+                    transitLeg: cur.transitLeg, mode: cur.mode,
+                    routeShortName: cur.routeShortName, routeColor: cur.routeColor, agencyName: cur.agencyName,
+                    from: { name: 'Tu posición' }, to: { name: from.name },
+                    startTime: Date.now(), endTime: from.when,
+                    duration: Math.max(30, (from.when - Date.now()) / 1000),
+                    intermediateStops: null,
+                    _pts: [projPt, ...rt.pts.slice(proj.seg + 1, bestJ + 1), [from.lat, from.lon]]
+                });
+            }
+            journeyItins = [{
+                startTime: Date.now(), endTime: alt.endTime,
+                duration: (alt.endTime - Date.now()) / 1000, legs
+            }];
+            tripAlts = null;
+            startTrip(0);
+            showToast(from.walking ? '🔀 Ruta cambiada' : '🔀 Nueva ruta: bájate en ' + from.name);
         }
 
         /* ===================== 16. MODO AR / CÁMARA ===================== */
