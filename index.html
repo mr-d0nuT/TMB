@@ -1702,7 +1702,7 @@
                 journeyDest = { name: name || 'Destino', lat, lon };
                 const its = await gatherJourneys(origin, { lat, lon });
                 if (its.length === 0) throw new Error('No se ha encontrado ninguna ruta en transporte público hasta ahí.');
-                its.sort((a, b) => a.endTime - b.endTime); // la que llega antes, primera
+                its.sort((a, b) => journeyScore(a) - journeyScore(b)); // la mejor primera: llegar antes, sin palizas a pie
                 journeyItins = its.slice(0, 6);
                 setLoading(null);
                 renderJourneys();
@@ -1712,6 +1712,17 @@
                 document.getElementById('journeySection').style.display = 'none';
                 showError(esc(err.message));
             }
+        }
+
+        // Peso de un itinerario para ordenar: llegar antes manda, pero cada metro
+        // a pie por encima de 1 km cuesta 0,6 s extra (el planner de TMB ignora
+        // maxWalkDistance y llega a proponer 3 km andando desde Sant Feliu por
+        // "llegar" unos minutos antes que el tren)
+        function journeyWalkDist(it) {
+            return it.legs.filter(l => !l.transitLeg).reduce((s, l) => s + (l.distance || 0), 0);
+        }
+        function journeyScore(it) {
+            return it.endTime + Math.max(0, journeyWalkDist(it) - 1000) * 600;
         }
 
         // Reúne itinerarios de todas las fuentes: planner de TMB (dos peticiones),
@@ -2772,7 +2783,8 @@
                 alts = alts
                     .filter(it => it.endTime <= curEta - 120000) // solo si ahorra ≥ 2 min
                     .filter(it => lineSig(it) !== curSig)
-                    .sort((a, b) => a.endTime - b.endTime)
+                    .filter(it => journeyWalkDist(it) <= 2500) // nada de palizas a pie en pleno trayecto
+                    .sort((a, b) => journeyScore(a) - journeyScore(b))
                     .slice(0, 3);
                 if (!activeTrip) return; // el usuario finalizó mientras buscábamos
                 tripAlts = { from, list: alts };
