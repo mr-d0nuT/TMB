@@ -1950,13 +1950,14 @@
                         all.push({
                             startTime: legs[0].startTime, endTime: legs[legs.length - 1].endTime,
                             duration: (legs[legs.length - 1].endTime - legs[0].startTime) / 1000,
-                            legs
+                            legs, _oStop: oSt
                         });
                     });
                 }
             }
             all.sort((a, b) => a.endTime - b.endTime);
-            return all.slice(0, 5);
+            // estación de subida lejana: ofrece también llegar en metro/bus
+            return (await chainAccess(origin, all.slice(0, 6))).slice(0, 6);
         }
 
         // Buses directos para trayectos cortos: el planner de TMB poda el transporte
@@ -2042,6 +2043,168 @@
             } catch { return []; }
         }
 
+        // --- ACCESO EN TRANSPORTE A LAS ESTACIONES DE LOS ITINERARIOS COMPUESTOS ---
+        // El planner de TMB poda el transporte cuando andar "gana", así que para
+        // llegar a la estación de subida se prueban, además del planner, los buses
+        // directos (iBus) y un tramo de metro compuesto por nosotros.
+
+        let metroLinesMem = null; // NOM_LINIA → CODI_LINIA
+        async function getMetroLineCodes() {
+            if (metroLinesMem) return metroLinesMem;
+            const CACHE_KEY = 'busbcn_metrolines_v1';
+            let cached = null;
+            try { cached = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch {}
+            if (cached && Date.now() - cached.t < 7 * 864e5) { metroLinesMem = cached.m; return cached.m; }
+            const res = await fetch(`https://api.tmb.cat/v1/transit/linies/metro?${TMB_AUTH}`);
+            if (!res.ok) return {};
+            const data = await res.json();
+            const m = {};
+            (data.features || []).forEach(f => { m[f.properties.NOM_LINIA] = f.properties.CODI_LINIA; });
+            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), m })); } catch {}
+            metroLinesMem = m;
+            return m;
+        }
+
+        const metroTopoCache = new Map(); // codi_linia → [{ id, name, lat, lon }] en orden
+        async function metroLineStations(lineCode) {
+            if (metroTopoCache.has(lineCode)) return metroTopoCache.get(lineCode);
+            const res = await fetch(`https://api.tmb.cat/v1/transit/linies/metro/${lineCode}/estacions?${TMB_AUTH}`);
+            if (!res.ok) throw new Error('Línea de metro no disponible.');
+            const data = await res.json();
+            const sts = (data.features || [])
+                .sort((a, b) => a.properties.ORDRE_ESTACIO - b.properties.ORDRE_ESTACIO)
+                .map(f => ({ id: f.properties.CODI_ESTACIO, name: f.properties.NOM_ESTACIO, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }));
+            metroTopoCache.set(lineCode, sts);
+            return sts;
+        }
+
+        // Salto corto en metro entre dos puntos con estaciones de la misma línea:
+        // tiempo real de iMetro si lo hay, estimación (~90 s/parada) si no
+        async function metroShortHop(origin, dest) {
+            let stations;
+            try { stations = await getMetroStations(); } catch { return null; }
+            const near = pt => stations
+                .map(s => ({ ...s, dist: getDistance(pt.lat, pt.lon, s.lat, s.lon) }))
+                .filter(s => s.dist <= 700)
+                .sort((a, b) => a.dist - b.dist).slice(0, 3);
+            const lineNames = s => String(s.lines || '').split(' · ').filter(x => /^L\d+$/.test(x));
+            const oN = near(origin), dN = near(dest);
+            for (const oSt of oN) {
+                for (const dSt of dN) {
+                    if (oSt.id === dSt.id) continue;
+                    for (const ln of lineNames(oSt).filter(l => lineNames(dSt).includes(l))) {
+                        try {
+                            const code = (await getMetroLineCodes())[ln];
+                            if (!code) continue;
+                            const topo = await metroLineStations(code);
+                            const iO = topo.findIndex(s => s.id == oSt.id || s.name === oSt.name);
+                            const iD = topo.findIndex(s => s.id == dSt.id || s.name === dSt.name);
+                            if (iO < 0 || iD < 0 || iO === iD) continue;
+                            const term = topo[iD > iO ? topo.length - 1 : 0].name;
+                            const walkO = oSt.dist / 1.25, walkD = dSt.dist / 1.25;
+                            const atPlatform = Date.now() + walkO * 1000;
+                            // próximo tren hacia ese lado; si no hay tiempo real, espera media
+                            let dep = null, est = true;
+                            try {
+                                const res = await fetch(`https://api.tmb.cat/v1/imetro/estacions/${oSt.id}?${TMB_AUTH}`);
+                                const vias = res.ok ? await res.json() : null;
+                                (Array.isArray(vias) ? vias : []).forEach(v => {
+                                    (v.propers_trens || []).slice(0, 3).forEach(t => {
+                                        if (t.nom_linia !== ln || t.desti_trajecte !== term) return;
+                                        const cand = Date.now() + t.temps_restant * 1000;
+                                        if (cand >= atPlatform && (dep === null || cand < dep)) { dep = cand; est = false; }
+                                    });
+                                });
+                            } catch {}
+                            if (dep === null) dep = atPlatform + 210000; // frecuencia típica: ~3,5 min de espera
+                            const arr = dep + (Math.abs(iD - iO) * 90 + 45) * 1000;
+                            const legs = [];
+                            if (oSt.dist > 80) legs.push({
+                                transitLeg: false, mode: 'WALK', duration: walkO, distance: oSt.dist,
+                                from: { name: 'Origen' }, to: { name: oSt.name },
+                                startTime: dep - walkO * 1000, endTime: dep,
+                                _pts: [[origin.lat, origin.lon], [oSt.lat, oSt.lon]]
+                            });
+                            const span = iD > iO ? topo.slice(iO, iD + 1) : topo.slice(iD, iO + 1).reverse();
+                            legs.push({
+                                transitLeg: true, mode: 'SUBWAY',
+                                routeShortName: ln, routeColor: metroColor(ln).replace('#', ''),
+                                headsign: term, agencyName: 'TMB', _est: est,
+                                from: { name: oSt.name, stopId: 'metro:' + oSt.id }, to: { name: dSt.name },
+                                startTime: dep, endTime: arr, duration: (arr - dep) / 1000,
+                                intermediateStops: null,
+                                _pts: span.map(s => [s.lat, s.lon])
+                            });
+                            if (dSt.dist > 80) legs.push({
+                                transitLeg: false, mode: 'WALK', duration: walkD, distance: dSt.dist,
+                                from: { name: dSt.name }, to: { name: 'Destination' },
+                                startTime: arr, endTime: arr + walkD * 1000,
+                                _pts: [[dSt.lat, dSt.lon], [dest.lat, dest.lon]]
+                            });
+                            return {
+                                startTime: legs[0].startTime, endTime: legs[legs.length - 1].endTime,
+                                duration: (legs[legs.length - 1].endTime - legs[0].startTime) / 1000, legs
+                            };
+                        } catch { /* prueba la siguiente combinación */ }
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Mejor acceso con transporte hasta una estación: planner + bus directo + metro
+        const accessMemo = new Map();
+        function bestAccessTo(origin, st, key) {
+            const k = `${origin.lat.toFixed(3)},${origin.lon.toFixed(3)}|${key}|${Math.floor(Date.now() / 60000)}`;
+            if (!accessMemo.has(k)) {
+                accessMemo.set(k, (async () => {
+                    const jobs = await Promise.allSettled([
+                        (async () => {
+                            const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
+                                `&fromPlace=${origin.lat},${origin.lon}&toPlace=${st.lat},${st.lon}` +
+                                `&mode=TRANSIT,WALK&numItineraries=2&locale=es&showIntermediateStops=true`;
+                            const res = await fetch(url);
+                            const data = res.ok ? await res.json() : null;
+                            return (((data || {}).plan || {}).itineraries || []).filter(x => x.legs.some(l => l.transitLeg));
+                        })(),
+                        shortHopBusJourneys(origin, { lat: st.lat, lon: st.lon }),
+                        metroShortHop(origin, { lat: st.lat, lon: st.lon })
+                    ]);
+                    const cands = jobs.flatMap(j => j.status === 'fulfilled' && j.value ? [].concat(j.value) : []);
+                    cands.sort((a, b) => a.endTime - b.endTime);
+                    return cands[0] || null;
+                })());
+            }
+            return accessMemo.get(k);
+        }
+
+        // Encadena el acceso en los itinerarios compuestos (marcados con _oStop):
+        // lejos (>1,2 km) sustituye la caminata; a media distancia (600 m–1,2 km)
+        // añade la variante con transporte y deja también la de a pie
+        async function chainAccess(origin, its) {
+            const out = [];
+            for (const it of its) {
+                const o = it._oStop;
+                delete it._oStop;
+                if (!o || o.dist <= 600) { out.push(it); continue; }
+                const tIdx = it.legs.findIndex(l => l.transitLeg);
+                let acc = null;
+                try { acc = await bestAccessTo(origin, o, o.code != null ? o.code : (o.i != null ? o.i : o.name)); } catch {}
+                if (acc && acc.endTime + 60000 <= it.legs[tIdx].startTime) {
+                    const accLegs = acc.legs.map(l => (!l.transitLeg && l.to.name === 'Destination') ? { ...l, to: { name: o.name } } : l);
+                    const up = {
+                        startTime: acc.startTime, endTime: it.endTime,
+                        duration: (it.endTime - acc.startTime) / 1000,
+                        legs: [...accLegs, ...it.legs.slice(tIdx)]
+                    };
+                    if (o.dist > 1200) out.push(up);
+                    else { out.push(it); out.push(up); }
+                } else out.push(it);
+            }
+            out.sort((a, b) => a.endTime - b.endTime);
+            return out;
+        }
+
         // Rutas con la Hispano Igualadina para destinos fuera del área del planner:
         // recorre los viajes del día buscando uno que pase por una parada cercana
         // al origen y después por una cercana al destino
@@ -2116,40 +2279,8 @@
                 }
             });
             its.sort((a, b) => a.endTime - b.endTime);
-
-            // Acceso multimodal: si la parada de subida queda a más de 1,2 km, intenta
-            // llegar hasta ella con el planner de TMB (metro/bus) y encadena las etapas
-            const shortlist = its.slice(0, 5);
-            const accessCache = {};
-            const upgraded = [];
-            for (const it of shortlist) {
-                const o = it._oStop;
-                delete it._oStop;
-                if (!o || o.dist <= 1200) { upgraded.push(it); continue; }
-                if (!(o.i in accessCache)) {
-                    try {
-                        const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
-                            `&fromPlace=${origin.lat},${origin.lon}&toPlace=${o.lat},${o.lon}` +
-                            `&mode=TRANSIT,WALK&numItineraries=2&locale=es`;
-                        const res = await fetch(url);
-                        const data = res.ok ? await res.json() : null;
-                        const cand = (((data || {}).plan || {}).itineraries || [])
-                            .filter(x => x.legs.some(l => l.transitLeg))
-                            .sort((a, b) => a.endTime - b.endTime)[0];
-                        accessCache[o.i] = cand || null;
-                    } catch { accessCache[o.i] = null; }
-                }
-                const acc = accessCache[o.i];
-                const busIdx = it.legs.findIndex(l => l.transitLeg);
-                if (acc && acc.endTime + 60000 <= it.legs[busIdx].startTime) {
-                    const legs = [...acc.legs, ...it.legs.slice(busIdx)];
-                    upgraded.push({ startTime: acc.startTime, endTime: it.endTime, duration: (it.endTime - acc.startTime) / 1000, legs });
-                } else {
-                    upgraded.push(it); // a pie: mejor que nada, y el usuario decide
-                }
-            }
-            upgraded.sort((a, b) => a.endTime - b.endTime);
-            return upgraded.slice(0, 4);
+            // parada de subida lejana: ofrece también llegar en metro/bus
+            return (await chainAccess(origin, its.slice(0, 5))).slice(0, 4);
         }
 
         // --- Rutas con FGC: se componen con el open data oficial (viajes-de-hoy) y
@@ -2266,40 +2397,8 @@
                 }
             }
             its.sort((a, b) => a.endTime - b.endTime);
-
-            // Acceso multimodal: si la estación de subida queda a más de 1,2 km,
-            // intenta llegar hasta ella con el planner de TMB y encadena las etapas
-            const shortlist = its.slice(0, 4);
-            const accessCache = {};
-            const upgraded = [];
-            for (const it of shortlist) {
-                const o = it._oStop;
-                delete it._oStop;
-                if (!o || o.dist <= 1200) { upgraded.push(it); continue; }
-                if (!(o.code in accessCache)) {
-                    try {
-                        const url = `https://api.tmb.cat/v1/planner/plan?${TMB_AUTH}` +
-                            `&fromPlace=${origin.lat},${origin.lon}&toPlace=${o.lat},${o.lon}` +
-                            `&mode=TRANSIT,WALK&numItineraries=2&locale=es&showIntermediateStops=true`;
-                        const res = await fetch(url);
-                        const data = res.ok ? await res.json() : null;
-                        const cand = (((data || {}).plan || {}).itineraries || [])
-                            .filter(x => x.legs.some(l => l.transitLeg))
-                            .sort((a, b) => a.endTime - b.endTime)[0];
-                        accessCache[o.code] = cand || null;
-                    } catch { accessCache[o.code] = null; }
-                }
-                const acc = accessCache[o.code];
-                const railIdx = it.legs.findIndex(l => l.transitLeg);
-                if (acc && acc.endTime + 60000 <= it.legs[railIdx].startTime) {
-                    const legs = [...acc.legs, ...it.legs.slice(railIdx)];
-                    upgraded.push({ startTime: acc.startTime, endTime: it.endTime, duration: (it.endTime - acc.startTime) / 1000, legs });
-                } else {
-                    upgraded.push(it); // a pie: mejor que nada, y el usuario decide
-                }
-            }
-            upgraded.sort((a, b) => a.endTime - b.endTime);
-            return upgraded.slice(0, 3);
+            // estación de subida lejana: ofrece también llegar en metro/bus
+            return (await chainAccess(origin, its.slice(0, 4))).slice(0, 4);
         }
 
         function legStrip(it) {
