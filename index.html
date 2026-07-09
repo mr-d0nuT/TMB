@@ -1339,7 +1339,7 @@
                     const sched = renfeTimeToEpoch(t.horaSalida);
                     const delayMin = (t.horaSalidaReal && sched) ? Math.round((dep - sched) / 60000) : 0;
                     const k = (t.linea || dir[0]) + '|' + dir[2];
-                    (groups.get(k) || groups.set(k, []).get(k)).push({ dep, delayMin, real: !!t.horaSalidaReal, line: t.linea || dir[0], destName: dir[2] });
+                    (groups.get(k) || groups.set(k, []).get(k)).push({ dep, delayMin, real: !!t.horaSalidaReal, line: t.linea || dir[0], destName: dir[2], termCode: dir[1] });
                 });
             });
 
@@ -1354,7 +1354,8 @@
                     next: items[1] ? `Siguiente: ${fmtTime(items[1].dep)}` : null,
                     occ: f.delayMin >= 2 ? { label: `Retraso +${f.delayMin} min`, high: true }
                         : (f.real ? { label: 'En hora ✓', high: false } : null),
-                    itinKey: null, itin: null
+                    itinKey: `train:${f.line}:${f.termCode}`,
+                    itin: { mode: 'train', line: f.line, termCode: f.termCode, stopCode: stop.code }
                 });
             });
             return departures;
@@ -1422,7 +1423,8 @@
                     next: items[1] ? `Siguiente: ${items[1].departure_time.slice(0, 5)}` : null,
                     occ: st && st.delayed > 0 ? { label: `Retrasos en la línea (${st.delayed} tren${st.delayed > 1 ? 'es' : ''})`, high: true }
                         : (occAvg !== null ? { label: `Ocupación ~${occAvg}%`, high: occAvg >= 60 } : null),
-                    itinKey: null, itin: null
+                    itinKey: `fgc:${line}:${dest}`,
+                    itin: { mode: 'fgc', line, headsign: dest, code: stop.code }
                 });
             });
             if (departures.length === 0) throw new Error('Sin salidas previstas en las próximas 2 horas.');
@@ -1487,7 +1489,9 @@
                     mins: Math.max(0, f.dep - nowMin),
                     arriveAt: dayStart.getTime() + f.dep * 60000,
                     next: `Llegada a destino: ${fmtMin(f.arrEnd)}` + (items[1] ? ` · Siguiente: ${fmtMin(items[1].dep)}` : ''),
-                    occ: null, itinKey: null, itin: null
+                    occ: null,
+                    itinKey: `hbus:${f.li}:${f.hi}:${f.dep}`,
+                    itin: { mode: 'hbus', li: f.li, hi: f.hi, dep: f.dep, idx }
                 });
             });
             if (departures.length === 0) throw new Error('Sin salidas previstas en las próximas 8 horas en esta parada.');
@@ -1522,6 +1526,9 @@
                 let nodes; // [{ name, lat, lon, hl }] en orden de recorrido
                 if (d.itin.mode === 'bus') nodes = await busItinerary(d.itin);
                 else if (d.itin.mode === 'metro') nodes = await metroItinerary(d.itin);
+                else if (d.itin.mode === 'train') nodes = await renfeItinerary(d.itin);
+                else if (d.itin.mode === 'fgc') nodes = await fgcItinerary(d.itin);
+                else if (d.itin.mode === 'hbus') nodes = await hbusItinerary(d.itin);
                 else nodes = await tramItinerary(d.itin);
 
                 if (!activeRoute || activeRoute.key !== d.itinKey) return;
@@ -1553,6 +1560,79 @@
                 itineraryDiv.innerHTML = `<div style="color:var(--primary); text-align:center; padding:10px; font-weight:600;">❌ ${esc(err.message)}</div>`;
                 activeRouteHTML = itineraryDiv.innerHTML;
             }
+        }
+
+        // Recorrido de un tren de Renfe: no hay orden oficial de estaciones en los
+        // datos, así que se encadena estación a estación hacia la terminal por
+        // vecina más cercana (las líneas son casi lineales; es solo para pintar)
+        async function renfeItinerary(itin) {
+            const cur0 = renfeStation(itin.stopCode), term = renfeStation(itin.termCode);
+            if (!cur0 || !term) throw new Error('No tengo el trazado de esta línea.');
+            const left = new Map(RENFE_STATIONS
+                .filter(s => s[0] != cur0.code && (s[4] || []).some(dd => dd[0] === itin.line))
+                .map(s => [s[0], { code: s[0], name: s[1], lat: s[2], lon: s[3] }]));
+            left.set(term.code, { code: term.code, name: term.name, lat: term.lat, lon: term.lon });
+            const nodes = [{ name: cur0.name, lat: cur0.lat, lon: cur0.lon, hl: true }];
+            let cur = cur0;
+            for (let i = 0; i < 80 && cur.code != term.code; i++) {
+                const dCurTerm = getDistance(cur.lat, cur.lon, term.lat, term.lon);
+                let best = null, bestD = Infinity;
+                left.forEach(s => {
+                    // solo hacia delante: la siguiente parada acerca a la terminal
+                    if (getDistance(s.lat, s.lon, term.lat, term.lon) > dCurTerm - 200) return;
+                    const dd = getDistance(cur.lat, cur.lon, s.lat, s.lon);
+                    if (dd < bestD) { bestD = dd; best = s; }
+                });
+                if (!best) break;
+                left.delete(best.code);
+                cur = best;
+                nodes.push({ name: best.name, lat: best.lat, lon: best.lon, hl: best.code == term.code });
+            }
+            if (cur.code != term.code) nodes.push({ name: term.name, lat: term.lat, lon: term.lon, hl: true });
+            return nodes;
+        }
+
+        // Recorrido de un tren de FGC: paradas reales del patrón (shape) según el
+        // open data del día, desde esta estación hasta el final
+        async function fgcItinerary(itin) {
+            const now = new Date();
+            let h = now.getHours();
+            if (h < 4) h += 24;
+            const hourFilters = [h, h + 1].map(x => `startswith(departure_time,"${String(x).padStart(2, '0')}:")`).join(' OR ');
+            const where = `route_short_name="${itin.line}" AND trip_headsign="${itin.headsign}" AND (${hourFilters})`;
+            const url = `${FGC_API}/viajes-de-hoy/records?select=shape_id,stop_sequence,stop_name,stop_lat,stop_lon,parent_station&where=${encodeURIComponent(where)}` +
+                `&group_by=shape_id,stop_sequence,stop_name,stop_lat,stop_lon,parent_station&order_by=stop_sequence&limit=100`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('El open data de FGC no responde ahora mismo.');
+            const rows = (await res.json()).results || [];
+            // el patrón con más paradas distintas es el de este tren
+            const byShape = new Map();
+            rows.forEach(r => (byShape.get(r.shape_id) || byShape.set(r.shape_id, []).get(r.shape_id)).push(r));
+            const shapeRows = [...byShape.values()].sort((a, b) => b.length - a.length)[0];
+            if (!shapeRows || shapeRows.length < 2) throw new Error('No tengo el recorrido de este tren ahora mismo.');
+            const me = shapeRows.find(r => r.parent_station === itin.code);
+            const nodes = shapeRows
+                .filter(r => !me || r.stop_sequence >= me.stop_sequence)
+                .map(r => ({ name: r.stop_name, lat: r.stop_lat, lon: r.stop_lon, hl: r.parent_station === itin.code }));
+            if (nodes.length < 2) throw new Error('No tengo el recorrido de este tren ahora mismo.');
+            nodes[nodes.length - 1].hl = true;
+            return nodes;
+        }
+
+        // Recorrido de un bus de la Hispano: el patrón exacto del viaje, del GTFS local
+        async function hbusItinerary(itin) {
+            const d = await ensureHispano();
+            const trip = (d.trips || []).find(([li, , hi, pat]) =>
+                li === itin.li && hi === itin.hi && pat.some(([si, tm]) => si === itin.idx && tm === itin.dep));
+            if (!trip) throw new Error('No encuentro el recorrido de este bus.');
+            const pat = trip[3];
+            const k0 = pat.findIndex(([si]) => si === itin.idx);
+            const nodes = pat.slice(Math.max(0, k0)).map(([si], j, arr) => {
+                const s = d.stops[si];
+                return { name: s[1], lat: s[2], lon: s[3], hl: j === 0 || j === arr.length - 1 };
+            });
+            if (nodes.length < 2) throw new Error('No encuentro el recorrido de este bus.');
+            return nodes;
         }
 
         // Topología de una línea de bus (paradas con orden y sentido), cacheada
