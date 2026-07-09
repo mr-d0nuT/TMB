@@ -1565,11 +1565,9 @@
         // Recorrido de un tren de Renfe: no hay orden oficial de estaciones en los
         // datos, así que se encadena estación a estación hacia la terminal por
         // vecina más cercana (las líneas son casi lineales; es solo para pintar)
-        async function renfeItinerary(itin) {
-            const cur0 = renfeStation(itin.stopCode), term = renfeStation(itin.termCode);
-            if (!cur0 || !term) throw new Error('No tengo el trazado de esta línea.');
+        function renfeChain(cur0, term, line) {
             const left = new Map(RENFE_STATIONS
-                .filter(s => s[0] != cur0.code && (s[4] || []).some(dd => dd[0] === itin.line))
+                .filter(s => s[0] != cur0.code && (s[4] || []).some(dd => dd[0] === line))
                 .map(s => [s[0], { code: s[0], name: s[1], lat: s[2], lon: s[3] }]));
             left.set(term.code, { code: term.code, name: term.name, lat: term.lat, lon: term.lon });
             const nodes = [{ name: cur0.name, lat: cur0.lat, lon: cur0.lon, hl: true }];
@@ -1590,6 +1588,12 @@
             }
             if (cur.code != term.code) nodes.push({ name: term.name, lat: term.lat, lon: term.lon, hl: true });
             return nodes;
+        }
+
+        async function renfeItinerary(itin) {
+            const cur0 = renfeStation(itin.stopCode), term = renfeStation(itin.termCode);
+            if (!cur0 || !term) throw new Error('No tengo el trazado de esta línea.');
+            return renfeChain(cur0, term, itin.line);
         }
 
         // Recorrido de un tren de FGC: paradas reales del patrón (shape) según el
@@ -1887,14 +1891,20 @@
         }
 
         function renfeRailLeg(line, fromSt, toSt, dep, arr) {
+            // cadena de estaciones de la línea: paradas para el mapa y trazado real
+            let stops = null;
+            if (fromSt.code && toSt.code && fromSt.lat && toSt.lat) {
+                try { stops = renfeChain(fromSt, toSt, line); } catch {}
+            }
             return {
                 transitLeg: true, mode: 'RAIL',
                 routeShortName: line, routeColor: (RENFE_COLORS[line] || 'EC0000'),
                 headsign: toSt.name, agencyName: 'Renfe',
                 from: { name: fromSt.name }, to: { name: toSt.name },
                 startTime: dep, endTime: arr, duration: (arr - dep) / 1000,
-                intermediateStops: null,
-                _pts: (fromSt.lat && toSt.lat) ? [[fromSt.lat, fromSt.lon], [toSt.lat, toSt.lon]] : null
+                intermediateStops: null, _stops: stops,
+                _pts: stops ? stops.map(s => [s.lat, s.lon])
+                    : (fromSt.lat && toSt.lat) ? [[fromSt.lat, fromSt.lon], [toSt.lat, toSt.lon]] : null
             };
         }
 
@@ -2133,6 +2143,7 @@
                                 from: { name: oSt.name, stopId: 'metro:' + oSt.id }, to: { name: dSt.name },
                                 startTime: dep, endTime: arr, duration: (arr - dep) / 1000,
                                 intermediateStops: null,
+                                _stops: span.map(s => ({ name: s.name, lat: s.lat, lon: s.lon })),
                                 _pts: span.map(s => [s.lat, s.lon])
                             });
                             if (dSt.dist > 80) legs.push({
@@ -2233,10 +2244,11 @@
             const its = [], seen = new Set();
             d.trips.forEach(([li, svc, hi, pat]) => {
                 if (!active.has(svc)) return;
-                let oStop = null, oDep = 0;
-                for (const [si, tm] of pat) {
+                let oStop = null, oDep = 0, kO = -1;
+                for (let k = 0; k < pat.length; k++) {
+                    const [si, tm] = pat[k];
                     if (!oStop) {
-                        if (oNear.has(si)) { oStop = oNear.get(si); oDep = tm; }
+                        if (oNear.has(si)) { oStop = oNear.get(si); oDep = tm; kO = k; }
                         continue;
                     }
                     if (!dNear.has(si)) continue;
@@ -2255,14 +2267,19 @@
                         startTime: dep - (oStop.dist / 1.25) * 1000, endTime: dep,
                         _pts: [[origin.lat, origin.lon], [oStop.lat, oStop.lon]]
                     });
+                    // paradas del viaje entre subida y bajada: para el mapa y el trazado
+                    const hStops = pat.slice(kO, k + 1).map(([sj]) => {
+                        const s = d.stops[sj];
+                        return { name: s[1], lat: s[2], lon: s[3] };
+                    });
                     legs.push({
                         transitLeg: true, mode: 'BUS',
                         routeShortName: hbusLine(d.lines[li][0]), routeColor: '7b3fa0',
                         headsign: d.heads[hi], agencyName: 'Hispano Igualadina',
                         from: { name: oStop.name }, to: { name: dStop.name },
                         startTime: dep, endTime: arr, duration: (arr - dep) / 1000,
-                        intermediateStops: null,
-                        _pts: [[oStop.lat, oStop.lon], [dStop.lat, dStop.lon]]
+                        intermediateStops: null, _stops: hStops,
+                        _pts: hStops.length > 1 ? hStops.map(s => [s.lat, s.lon]) : [[oStop.lat, oStop.lon], [dStop.lat, dStop.lon]]
                     });
                     if (dStop.dist > 80) legs.push({
                         transitLeg: false, mode: 'WALK', duration: dStop.dist / 1.25, distance: dStop.dist,
@@ -2464,7 +2481,38 @@
             iconSize: [30, 30], iconAnchor: [15, 26]
         });
 
+        // Paradas de un tramo de transporte, para marcarlas en el mapa
+        const legStopsCache = new Map();
+        async function legStops(l) {
+            if (!l.transitLeg) return null;
+            if (l._stops && l._stops.length > 1) return l._stops;
+            // tramos del planner: vienen con las paradas intermedias
+            if (l.intermediateStops && l.intermediateStops.length) {
+                const out = [];
+                if (l.from && l.from.lat != null) out.push({ name: l.from.name, lat: l.from.lat, lon: l.from.lon });
+                l.intermediateStops.forEach(s => { if (s.lat != null) out.push({ name: s.name, lat: s.lat, lon: s.lon }); });
+                if (l.to && l.to.lat != null) out.push({ name: l.to.name, lat: l.to.lat, lon: l.to.lon });
+                return out.length > 1 ? out : null;
+            }
+            // FGC compuesto: patrón real del open data, cortado en la bajada
+            if (l.agencyName === 'FGC' && l.from.stopId) {
+                const key = `${l.routeShortName}|${l.headsign}|${l.from.stopId}|${l.to.name}`;
+                if (legStopsCache.has(key)) return legStopsCache.get(key);
+                let out = null;
+                try {
+                    const nodes = await fgcItinerary({ line: l.routeShortName, headsign: l.headsign, code: l.from.stopId.split(':')[1] });
+                    const cut = nodes.findIndex(n => n.name === l.to.name);
+                    out = cut > 0 ? nodes.slice(0, cut + 1) : nodes;
+                } catch {}
+                legStopsCache.set(key, out);
+                return out;
+            }
+            return null;
+        }
+
+        let drawSeq = 0;
         function drawJourney(it) {
+            const seq = ++drawSeq;
             routeLayer.clearLayers();
             if (!destMarkerLayer) destMarkerLayer = L.layerGroup().addTo(map);
             destMarkerLayer.clearLayers();
@@ -2481,6 +2529,15 @@
                     L.circleMarker(pts[0], { radius: 6, color, fillColor: '#fff', fillOpacity: 1, weight: 3 })
                         .bindPopup(`<b>${esc(l.from.name)}</b>`).addTo(routeLayer);
                 }
+            });
+            // todas las paradas de cada tramo (Renfe, FGC, Hispano, metro, planner…),
+            // en cuanto se resuelven; si el usuario ya cambió de ruta, no se pintan
+            it.legs.filter(l => l.transitLeg).forEach(async l => {
+                const stops = await legStops(l).catch(() => null);
+                if (seq !== drawSeq || !stops) return;
+                const color = l.routeColor ? '#' + l.routeColor : '#da291c';
+                stops.forEach(s => L.circleMarker([s.lat, s.lon], { radius: 4.5, color, fillColor: '#fff', fillOpacity: 1, weight: 2.5 })
+                    .bindPopup(`<b>${esc(s.name)}</b>`).addTo(routeLayer));
             });
             try { map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] }); } catch {}
         }
@@ -2802,6 +2859,16 @@
             activeTrip = { it, rt, follow: true, offCount: 0, arrived: false, watchId: null };
             map.on('dragstart', tripOnDrag);
 
+            // marca todas las paradas de los tramos (Renfe, FGC, Hispano, metro…)
+            const tripRef = activeTrip;
+            it.legs.filter(l => l.transitLeg).forEach(async l => {
+                const stops = await legStops(l).catch(() => null);
+                if (!stops || activeTrip !== tripRef) return;
+                const color = l.routeColor ? '#' + l.routeColor : '#0a84ff';
+                stops.forEach(s => L.circleMarker([s.lat, s.lon], { radius: 4.5, color, fillColor: '#fff', fillOpacity: 1, weight: 2.5 })
+                    .bindPopup(`<b>${esc(s.name)}</b>`).addTo(tripLayer));
+            });
+
             document.getElementById('journeySection').style.display = 'none';
             document.getElementById('tripPanel').style.display = 'block';
             document.getElementById('tripAltPanel').style.display = 'none';
@@ -2932,12 +2999,21 @@
                 const here = userPos || { lat: rt.pts[proj.seg][0], lon: rt.pts[proj.seg][1] };
                 return { lat: here.lat, lon: here.lon, name: 'tu posición', when: now, legIdx: li, walking: true };
             }
-            // primera parada intermedia que quede por delante (si el planner las dio)
-            const ahead = (leg.intermediateStops || []).filter(s =>
-                s.lat && projectOnRoute(rt, s.lat, s.lon).along > proj.along + 40);
+            // primera parada que quede por delante (del planner o de los tramos compuestos)
+            const ahead = ((leg.intermediateStops || leg._stops || []))
+                .filter(s => s.lat != null)
+                .map(s => ({ s, along: projectOnRoute(rt, s.lat, s.lon).along }))
+                .filter(x => x.along > proj.along + 40)
+                .sort((a, b) => a.along - b.along);
             if (ahead.length) {
-                const s = ahead[0];
-                return { lat: s.lat, lon: s.lon, name: s.name, when: Math.max(now + 45000, s.arrival || 0), legIdx: li };
+                const x = ahead[0];
+                let when = x.s.arrival;
+                if (!when) {
+                    // sin horario por parada: estima con el ritmo previsto del resto del trayecto
+                    const remFrac = Math.max(0, Math.min(1, (x.along - proj.along) / Math.max(1, rt.total - proj.along)));
+                    when = now + (activeTrip.lastRemSecs != null ? activeTrip.lastRemSecs : it.duration) * 1000 * remFrac;
+                }
+                return { lat: x.s.lat, lon: x.s.lon, name: x.s.name, when: Math.max(now + 45000, when), legIdx: li };
             }
             // sin intermedias (tramos compuestos): el próximo transbordo o bajada
             const end = (leg._pts && leg._pts[leg._pts.length - 1]) ||
