@@ -1636,6 +1636,7 @@
                 .map(r => ({ name: r.stop_name, lat: r.stop_lat, lon: r.stop_lon, hl: r.parent_station === itin.code }));
             if (nodes.length < 2) throw new Error('No tengo el recorrido de este tren ahora mismo.');
             nodes[nodes.length - 1].hl = true;
+            nodes._shapeId = shapeRows[0].shape_id; // para pintar el trazado real de la vía
             return nodes;
         }
 
@@ -2526,6 +2527,10 @@
             detail.style.display = 'block';
             fillStepStops(it, detail);
             drawJourney(it);
+            // si algún tramo era una recta, repinta cuando llegue su trazado real
+            ensureLegGeometry(it).then(changed => {
+                if (changed && window._lastDrawnIt === it) drawJourney(it);
+            });
         }
 
         const destIcon = L.divIcon({
@@ -2555,7 +2560,8 @@
                 try {
                     const nodes = await fgcItinerary({ line: l.routeShortName, headsign: l.headsign, code: l.from.stopId.split(':')[1] });
                     const cut = nodes.findIndex(n => n.name === l.to.name);
-                    out = cut > 0 ? nodes.slice(0, cut + 1) : nodes;
+                    // ojo: slice() pierde las propiedades extra del array (_shapeId)
+                    out = cut > 0 ? Object.assign(nodes.slice(0, cut + 1), { _shapeId: nodes._shapeId }) : nodes;
                 } catch {}
                 legStopsCache.set(key, out);
                 return out;
@@ -2563,9 +2569,50 @@
             return null;
         }
 
+        // Trazado real de la vía de un patrón FGC (GTFS shapes, cacheado)
+        const fgcShapeCache = new Map();
+        async function fgcShapePts(shapeId) {
+            if (fgcShapeCache.has(shapeId)) return fgcShapeCache.get(shapeId);
+            const url = `${FGC_API}/gtfs_shapes/exports/json?where=${encodeURIComponent('shape_id=' + shapeId)}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('shape no disponible');
+            const rows = await res.json();
+            const pts = rows.sort((a, b) => a.shape_pt_sequence - b.shape_pt_sequence)
+                .map(r => [r.shape_pt_lat, r.shape_pt_lon]);
+            fgcShapeCache.set(shapeId, pts);
+            return pts;
+        }
+
+        // Nada de rectas origen→fin: si un tramo solo tiene dos puntos, su trazado
+        // pasa a seguir las paradas del recorrido (y en FGC, la vía real del GTFS).
+        // Devuelve true si cambió alguna geometría (para repintar).
+        async function ensureLegGeometry(it) {
+            let changed = false;
+            await Promise.all(it.legs.map(async l => {
+                if (!l.transitLeg || (l._pts && l._pts.length > 2) || (l.legGeometry && l.legGeometry.points)) return;
+                const stops = await legStops(l).catch(() => null);
+                if (!stops || stops.length < 2) return;
+                if (!l._stops) l._stops = stops;
+                let pts = stops.map(s => [s.lat, s.lon]);
+                if (stops._shapeId != null) {
+                    try {
+                        const shape = await fgcShapePts(stops._shapeId);
+                        const nearest = p => { let bi = 0, bd = Infinity; shape.forEach((q, i) => { const d = getDistance(p.lat, p.lon, q[0], q[1]); if (d < bd) { bd = d; bi = i; } }); return bi; };
+                        const i0 = nearest(stops[0]), i1 = nearest(stops[stops.length - 1]);
+                        const slice = shape.slice(Math.min(i0, i1), Math.max(i0, i1) + 1);
+                        if (slice.length > 2) pts = i0 <= i1 ? slice : slice.slice().reverse();
+                    } catch { /* con las paradas basta */ }
+                }
+                l._pts = pts;
+                changed = true;
+            }));
+            return changed;
+        }
+
         let drawSeq = 0;
         function drawJourney(it) {
             const seq = ++drawSeq;
+            window._lastDrawnIt = it;
             routeLayer.clearLayers();
             if (!destMarkerLayer) destMarkerLayer = L.layerGroup().addTo(map);
             destMarkerLayer.clearLayers();
@@ -2894,11 +2941,13 @@
             return best;
         }
 
-        function startTrip(i) {
+        async function startTrip(i) {
             const it = journeyItins[i];
             if (!it || !journeyDest) return;
             if (!navigator.geolocation) { showError('Este dispositivo no tiene GPS para navegar.'); return; }
             stopTrip(true);
+            // la ruta de navegación debe seguir el recorrido real, no rectas
+            try { await ensureLegGeometry(it); } catch {}
             const rt = buildRoutePoints(it);
             if (rt.total === 0) { showError('Esta ruta no tiene trazado para navegar.'); return; }
 
