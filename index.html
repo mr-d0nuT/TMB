@@ -365,6 +365,18 @@
         .trip-actions .trip-alt { background: #da291c; color: #fff; border-color: #da291c; box-shadow: 0 3px 10px rgba(218,41,28,.35); }
         .trip-actions .trip-end { background: color-mix(in srgb, var(--primary) 12%, var(--card)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, transparent); }
 
+        /* ---- Popup de parada durante el trayecto: salidas inminentes ---- */
+        .dep-pop { min-width: 200px; max-width: 240px; max-height: 46vh; overflow-y: auto; color: #1c1c1e; }
+        .dep-pop-h { font-weight: 800; font-size: .92rem; margin-bottom: 4px; }
+        .dep-row { display: flex; align-items: center; gap: 7px; padding: 6px 0; border-top: 1px solid rgba(0,0,0,.08); flex-wrap: wrap; }
+        .dep-badge { color: #fff; border-radius: 6px; padding: 1px 7px; font-weight: 800; font-size: .78rem; flex: 0 0 auto; }
+        .dep-dest { flex: 1; font-size: .8rem; font-weight: 600; min-width: 80px; }
+        .dep-mins { font-weight: 800; font-variant-numeric: tabular-nums; font-size: .82rem; }
+        .dep-note { font-size: .8rem; color: #6e6e73; padding: 4px 0; }
+        .dep-row.dep-alt { cursor: pointer; border: 1.5px solid #0a8f4e; border-radius: 10px; padding: 6px 8px; margin-top: 6px; background: rgba(52,199,89,.12); animation: depBlink 1.1s ease-in-out infinite; }
+        .dep-alt-tag { flex-basis: 100%; font-size: .7rem; font-weight: 800; color: #0a8f4e; margin-top: 2px; }
+        @keyframes depBlink { 50% { box-shadow: 0 0 0 5px rgba(52,199,89,.28); } }
+
         /* ---- Alternativas más rápidas durante el trayecto ---- */
         #tripAltPanel { display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; max-height: 42vh; overflow-y: auto; }
         .trip-alt-note { font-size: .86rem; font-weight: 600; color: var(--text-soft); padding: 4px 2px; }
@@ -2900,14 +2912,22 @@
             activeTrip = { it, rt, follow: true, offCount: 0, arrived: false, watchId: null };
             map.on('dragstart', tripOnDrag);
 
-            // marca todas las paradas de los tramos (Renfe, FGC, Hispano, metro…)
+            // marca todas las paradas de los tramos (Renfe, FGC, Hispano, metro…);
+            // al tocar una se ven sus salidas y las alternativas a destino desde ella
             const tripRef = activeTrip;
-            it.legs.filter(l => l.transitLeg).forEach(async l => {
-                const stops = await legStops(l).catch(() => null);
-                if (!stops || activeTrip !== tripRef) return;
-                const color = l.routeColor ? '#' + l.routeColor : '#0a84ff';
-                stops.forEach(s => L.circleMarker([s.lat, s.lon], { radius: 4.5, color, fillColor: '#fff', fillOpacity: 1, weight: 2.5 })
-                    .bindPopup(`<b>${esc(s.name)}</b>`).addTo(tripLayer));
+            it.legs.forEach((l, li) => {
+                if (!l.transitLeg) return;
+                (async () => {
+                    const stops = await legStops(l).catch(() => null);
+                    if (!stops || activeTrip !== tripRef) return;
+                    const color = l.routeColor ? '#' + l.routeColor : '#0a84ff';
+                    stops.forEach(s => {
+                        const m = L.circleMarker([s.lat, s.lon], { radius: 6, color, fillColor: '#fff', fillOpacity: 1, weight: 3 })
+                            .bindPopup(`<div class="dep-pop"><div class="dep-pop-h">${esc(s.name)}</div><div class="dep-note">🔎 Buscando salidas…</div></div>`, { autoPan: false, maxWidth: 260 })
+                            .addTo(tripLayer);
+                        m.on('popupopen', () => onTripStopTap(li, s, m));
+                    });
+                })();
             });
 
             document.getElementById('journeySection').style.display = 'none';
@@ -3106,9 +3126,14 @@
         }
 
         function switchTripTo(i) {
-            if (!activeTrip || !tripAlts || !tripAlts.list[i]) return;
-            const alt = tripAlts.list[i];
-            const from = tripAlts.from;
+            if (!tripAlts || !tripAlts.list[i]) return;
+            const a = tripAlts;
+            tripAlts = null;
+            applyTripSwitch(a.from, a.list[i]);
+        }
+
+        function applyTripSwitch(from, alt) {
+            if (!activeTrip) return;
             const rt = activeTrip.rt;
             const proj = activeTrip.lastProj || projectOnRoute(rt, rt.pts[0][0], rt.pts[0][1]);
             const legs = [...alt.legs];
@@ -3139,6 +3164,98 @@
             tripAlts = null;
             startTrip(0);
             showToast(from.walking ? '🔀 Ruta cambiada' : '🔀 Nueva ruta: bájate en ' + from.name);
+        }
+
+        /* ---- Popup de parada durante el trayecto: salidas + cambio de ruta ---- */
+
+        // Salidas inminentes de TODAS las redes alrededor de un punto
+        async function departuresNear(pt) {
+            const jobs = [];
+            try {
+                (await tmbBusStopsNear(pt.lat, pt.lon, 130, 3))
+                    .forEach(b => jobs.push(fetchBusArrivals({ code: b.code }).then(ds => ds.map(d => ({ ...d, icon: MODE_ICON.bus })))));
+            } catch {}
+            try {
+                (await getMetroStations()).filter(m => getDistance(pt.lat, pt.lon, m.lat, m.lon) <= 180).slice(0, 2)
+                    .forEach(m => jobs.push(fetchMetroArrivals({ id: m.id }).then(ds => ds.map(d => ({ ...d, icon: MODE_ICON.metro })))));
+            } catch {}
+            RENFE_STATIONS.filter(s => getDistance(pt.lat, pt.lon, s[2], s[3]) <= 300).slice(0, 1)
+                .forEach(s => jobs.push(fetchTrainArrivals({ type: 'train', code: s[0], name: s[1] }).then(ds => ds.map(d => ({ ...d, icon: MODE_ICON.train })))));
+            FGC_STATIONS.filter(s => getDistance(pt.lat, pt.lon, s[2], s[3]) <= 300).slice(0, 1)
+                .forEach(s => jobs.push(fetchFgcArrivals({ code: s[0], name: s[1] }).then(ds => ds.map(d => ({ ...d, icon: MODE_ICON.fgc })))));
+            try {
+                const hd = await ensureHispano();
+                hd.stops.map((s, i) => ({ i, code: s[0], dist: getDistance(pt.lat, pt.lon, s[2], s[3]) }))
+                    .filter(x => x.dist <= 200).slice(0, 1)
+                    .forEach(x => jobs.push(fetchHbusArrivals({ type: 'hbus', code: x.code, idx: x.i }).then(ds => ds.map(d => ({ ...d, icon: MODE_ICON.hbus })))));
+            } catch {}
+            const res = await Promise.allSettled(jobs);
+            const deps = res.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+            deps.sort((a, b) => a.arriveAt - b.arriveAt);
+            return deps;
+        }
+
+        // Al tocar una parada del trayecto: sus salidas, marcando en verde las que
+        // llegan antes a tu destino (tocarlas cambia la ruta)
+        let tripStopAlts = null; // { from, list }
+        async function onTripStopTap(li, s, marker) {
+            if (!activeTrip) return;
+            const seq = (onTripStopTap._seq = (onTripStopTap._seq || 0) + 1);
+            const rt = activeTrip.rt;
+            const proj = activeTrip.lastProj || projectOnRoute(rt, rt.pts[0][0], rt.pts[0][1]);
+            const sAlong = projectOnRoute(rt, s.lat, s.lon).along;
+            const now = Date.now();
+            const remMs = (activeTrip.lastRemSecs != null ? activeTrip.lastRemSecs : activeTrip.it.duration) * 1000;
+            const ahead = sAlong > proj.along + 40;
+            const when = ahead
+                ? now + remMs * Math.max(0, Math.min(1, (sAlong - proj.along) / Math.max(1, rt.total - proj.along)))
+                : now;
+            const curEta = now + remMs;
+            const lineSig = itn => itn.legs.filter(l => l.transitLeg).map(l => l.routeShortName || l.mode).join('>');
+            const curSig = lineSig({ legs: activeTrip.it.legs.slice(li) });
+
+            const [depsR, altsR] = await Promise.allSettled([
+                departuresNear(s),
+                (ahead && journeyDest) ? gatherJourneys({ lat: s.lat, lon: s.lon }, journeyDest, when) : Promise.resolve([])
+            ]);
+            if (seq !== onTripStopTap._seq || !activeTrip || !marker.isPopupOpen()) return;
+            const deps = depsR.status === 'fulfilled' ? depsR.value : [];
+            const alts = (altsR.status === 'fulfilled' ? altsR.value : [])
+                .filter(x => x.endTime <= curEta - 120000) // solo si ahorra ≥ 2 min
+                .filter(x => lineSig(x) !== curSig)
+                .filter(x => journeyWalkDist(x) <= 2500)
+                .sort((a, b) => a.endTime - b.endTime);
+            tripStopAlts = { from: { lat: s.lat, lon: s.lon, name: s.name, when, legIdx: li }, list: alts };
+
+            // ¿qué salidas son el primer tramo de una alternativa más rápida? Esas
+            // van siempre arriba, aunque no sean las más inminentes
+            const matchOf = d => alts.findIndex(x => {
+                const t = x.legs.find(l => l.transitLeg);
+                return t && (t.routeShortName || '') === d.line && Math.abs(t.startTime - d.arriveAt) < 3 * 60000;
+            });
+            const tagged = deps.map(d => ({ d, ai: matchOf(d) }));
+            const flagged = tagged.filter(x => x.ai >= 0).slice(0, 3);
+            const plain = tagged.filter(x => x.ai < 0).slice(0, 9 - flagged.length);
+            const rows = [...flagged, ...plain].map(({ d, ai }) => {
+                const mins = Math.max(0, Math.round((d.arriveAt - now) / 60000));
+                const row = `<span class="dep-badge" style="background:${d.color}">${esc(d.line)}</span>
+                    <span class="dep-dest">${d.icon || ''} ${esc(d.dest)}</span>
+                    <span class="dep-mins">${mins <= 0 ? 'ya' : mins + '&prime;'}</span>`;
+                return ai >= 0
+                    ? `<div class="dep-row dep-alt" onclick="switchFromStop(${ai})">${row}
+                         <div class="dep-alt-tag">⚡ Más rápida a tu destino · llegas a las ${fmtTime(alts[ai].endTime)} · toca para cambiar</div></div>`
+                    : `<div class="dep-row">${row}</div>`;
+            }).join('');
+            marker.setPopupContent(`<div class="dep-pop"><div class="dep-pop-h">${esc(s.name)}</div>` +
+                (rows || '<div class="dep-note">Sin salidas previstas ahora mismo aquí.</div>') + '</div>');
+        }
+
+        function switchFromStop(i) {
+            if (!tripStopAlts || !tripStopAlts.list[i]) return;
+            const a = tripStopAlts;
+            tripStopAlts = null;
+            map.closePopup();
+            applyTripSwitch(a.from, a.list[i]);
         }
 
         /* ===================== 16. MODO AR / CÁMARA ===================== */
