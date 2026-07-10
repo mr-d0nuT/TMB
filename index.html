@@ -316,6 +316,10 @@
         .jstep-body { flex: 1; min-width: 0; font-size: .86rem; color: var(--text-soft); }
         .jstep-body b { color: var(--text); }
         .jstep-sub { font-size: .76rem; color: var(--text-faint); margin-top: 1px; }
+        .jstep-det summary { cursor: pointer; font-size: .76rem; font-weight: 700; color: var(--text-faint); margin-top: 5px; -webkit-tap-highlight-color: transparent; }
+        .jstep-det[open] summary { color: var(--text-soft); margin-bottom: 3px; }
+        .jstep-det .itinerary-node { padding: 4px 0; }
+        .jstep-det .node-name { font-size: .8rem; }
 
         footer { text-align: center; font-size: .72rem; color: var(--text-faint); padding: 26px 0 10px; }
 
@@ -1976,9 +1980,11 @@
         async function shortHopBusJourneys(origin, dest) {
             if (getDistance(origin.lat, origin.lon, dest.lat, dest.lon) > 3500) return [];
             try {
+                // en zona densa (Eixample) hay paradas cada 100 m: mirar solo las 5
+                // más cercanas se dejaba fuera líneas que paran a 250 m (p. ej. el 47)
                 const [oStops, dNear] = await Promise.all([
-                    tmbBusStopsNear(origin.lat, origin.lon, 350, 5),
-                    tmbBusStopsNear(dest.lat, dest.lon, 350, 10)
+                    tmbBusStopsNear(origin.lat, origin.lon, 350, 12),
+                    tmbBusStopsNear(dest.lat, dest.lon, 350, 15)
                 ]);
                 const dCodes = new Map(dNear.map(s => [String(s.code), s]));
                 if (!oStops.length || !dCodes.size) return [];
@@ -2001,9 +2007,10 @@
                         let oF = null, dF = null;
                         for (const cand of oFs) {
                             const sentit = cand.properties.SENTIT;
+                            // de las paradas de bajada posibles, la que deje más cerca a pie
                             const down = data.features
                                 .filter(f => f.properties.SENTIT === sentit && f.properties.ORDRE > cand.properties.ORDRE && dCodes.has(String(f.properties.CODI_PARADA)))
-                                .sort((a, b2) => a.properties.ORDRE - b2.properties.ORDRE)[0];
+                                .sort((a, b2) => dCodes.get(String(a.properties.CODI_PARADA)).dist - dCodes.get(String(b2.properties.CODI_PARADA)).dist)[0];
                             if (down) { oF = cand; dF = down; break; }
                         }
                         if (!oF || !dF) continue;
@@ -2012,10 +2019,11 @@
                         if (seenLine.has(key)) continue;
                         seenLine.add(key);
                         const dStop = dCodes.get(String(dF.properties.CODI_PARADA));
-                        const seq = data.features
+                        const seqStops = data.features
                             .filter(f => f.properties.SENTIT === sentit && f.properties.ORDRE >= oF.properties.ORDRE && f.properties.ORDRE <= dF.properties.ORDRE)
                             .sort((a, b2) => a.properties.ORDRE - b2.properties.ORDRE)
-                            .map(f => [f.geometry.coordinates[1], f.geometry.coordinates[0]]);
+                            .map(f => ({ name: f.properties.NOM_PARADA, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }));
+                        const seq = seqStops.map(s => [s.lat, s.lon]);
                         let rideM = 0;
                         for (let i = 1; i < seq.length; i++) rideM += getDistance(seq[i-1][0], seq[i-1][1], seq[i][0], seq[i][1]);
                         const rideMs = Math.max(60000, (rideM / 3.6) * 1000 + seq.length * 12000); // ~13 km/h + 12 s por parada
@@ -2033,7 +2041,7 @@
                             headsign: b.dest, agencyName: 'TMB',
                             from: { name: o.name }, to: { name: dStop.name },
                             startTime: dep, endTime: arr2, duration: rideMs / 1000,
-                            intermediateStops: new Array(Math.max(0, seq.length - 2)),
+                            intermediateStops: null, _stops: seqStops,
                             _pts: seq
                         });
                         if (dStop.dist > 80) legs.push({
@@ -2163,7 +2171,9 @@
             return null;
         }
 
-        // Mejor acceso con transporte hasta una estación: planner + bus directo + metro
+        // Mejores accesos con transporte hasta una estación: planner + bus directo +
+        // metro. Devuelve hasta dos, de modos distintos (p. ej. metro Y bus), para
+        // que el usuario vea la opción de bus aunque el metro gane por un minuto
         const accessMemo = new Map();
         function bestAccessTo(origin, st, key) {
             const k = `${origin.lat.toFixed(3)},${origin.lon.toFixed(3)}|${key}|${Math.floor(Date.now() / 60000)}`;
@@ -2183,7 +2193,15 @@
                     ]);
                     const cands = jobs.flatMap(j => j.status === 'fulfilled' && j.value ? [].concat(j.value) : []);
                     cands.sort((a, b) => a.endTime - b.endTime);
-                    return cands[0] || null;
+                    const out = [], modes = new Set();
+                    for (const c of cands) {
+                        const m = (c.legs.find(l => l.transitLeg) || {}).mode || '?';
+                        if (modes.has(m)) continue;
+                        modes.add(m);
+                        out.push(c);
+                        if (out.length >= 2) break;
+                    }
+                    return out;
                 })());
             }
             return accessMemo.get(k);
@@ -2199,18 +2217,21 @@
                 delete it._oStop;
                 if (!o || o.dist <= 600) { out.push(it); continue; }
                 const tIdx = it.legs.findIndex(l => l.transitLeg);
-                let acc = null;
-                try { acc = await bestAccessTo(origin, o, o.code != null ? o.code : (o.i != null ? o.i : o.name)); } catch {}
-                if (acc && acc.endTime + 60000 <= it.legs[tIdx].startTime) {
-                    const accLegs = acc.legs.map(l => (!l.transitLeg && l.to.name === 'Destination') ? { ...l, to: { name: o.name } } : l);
-                    const up = {
-                        startTime: acc.startTime, endTime: it.endTime,
-                        duration: (it.endTime - acc.startTime) / 1000,
-                        legs: [...accLegs, ...it.legs.slice(tIdx)]
-                    };
-                    if (o.dist > 1200) out.push(up);
-                    else { out.push(it); out.push(up); }
-                } else out.push(it);
+                let accs = [];
+                try { accs = (await bestAccessTo(origin, o, o.code != null ? o.code : (o.i != null ? o.i : o.name))) || []; } catch {}
+                const ups = accs
+                    .filter(acc => acc.endTime + 60000 <= it.legs[tIdx].startTime)
+                    .map(acc => {
+                        const accLegs = acc.legs.map(l => (!l.transitLeg && l.to.name === 'Destination') ? { ...l, to: { name: o.name } } : l);
+                        return {
+                            startTime: acc.startTime, endTime: it.endTime,
+                            duration: (it.endTime - acc.startTime) / 1000,
+                            legs: [...accLegs, ...it.legs.slice(tIdx)]
+                        };
+                    });
+                if (!ups.length) out.push(it);
+                else if (o.dist > 1200) out.push(...ups);
+                else out.push(it, ...ups);
             }
             out.sort((a, b) => a.endTime - b.endTime);
             return out;
@@ -2445,7 +2466,7 @@
         }
 
         function journeyStepsHTML(it) {
-            return it.legs.map(l => {
+            return it.legs.map((l, i) => {
                 if (!l.transitLeg) {
                     return `<div class="jstep">
                         <div class="jstep-icon">🚶</div>
@@ -2454,13 +2475,32 @@
                     </div>`;
                 }
                 const color = l.routeColor ? '#' + l.routeColor : '#da291c';
-                const nStops = (l.intermediateStops ? l.intermediateStops.length + 1 : null);
+                const nStops = l.intermediateStops ? l.intermediateStops.length + 1
+                    : (l._stops && l._stops.length > 1 ? l._stops.length - 1 : null);
                 return `<div class="jstep">
                     <div class="jstep-icon"><span class="jleg-badge" style="background:${color}">${esc(l.routeShortName || l.mode)}</span></div>
                     <div class="jstep-body"><b>${esc(l.from.name)}</b> → <b>${esc(l.to.name)}</b>
-                        <div class="jstep-sub">dirección ${esc(l.headsign || '')} · ${nStops ? nStops + ' paradas · ' : ''}${Math.round(l.duration / 60)} min · ${fmtTime(l.startTime)}${l._est ? ' · llegada ≈' + fmtTime(l.endTime) : ''}</div></div>
+                        <div class="jstep-sub">dirección ${esc(l.headsign || '')} · ${nStops ? nStops + ' paradas · ' : ''}${Math.round(l.duration / 60)} min · ${fmtTime(l.startTime)}${l._est ? ' · llegada ≈' + fmtTime(l.endTime) : ''}</div>
+                        <div class="jstep-stops" data-leg="${i}"></div></div>
                 </div>`;
             }).join('');
+        }
+
+        // Rellena, en cuanto se resuelven, las paradas de cada tramo del detalle
+        function fillStepStops(it, container) {
+            it.legs.forEach(async (l, i) => {
+                if (!l.transitLeg) return;
+                const stops = await legStops(l).catch(() => null);
+                const el = container.querySelector(`.jstep-stops[data-leg="${i}"]`);
+                if (!el || !stops || stops.length < 2) return;
+                const color = l.routeColor ? '#' + l.routeColor : '#da291c';
+                el.innerHTML = `<details class="jstep-det"><summary>Ver las ${stops.length} paradas</summary><div>` +
+                    stops.map((s, j) => `
+                        <div class="itinerary-node">
+                            <div class="node-dot" style="background:${j === 0 ? '#da291c' : (j === stops.length - 1 ? '#0a8f4e' : color)}"></div>
+                            <div class="node-name ${j === 0 || j === stops.length - 1 ? 'hl' : ''}">${esc(s.name)}</div>
+                        </div>`).join('') + '</div></details>';
+            });
         }
 
         function toggleJourneyDetail(i, cardEl, forceOpen = false) {
@@ -2472,6 +2512,7 @@
             if (isOpen && !forceOpen) { routeLayer.clearLayers(); return; }
             detail.innerHTML = `<button class="trip-start-btn" onclick="event.stopPropagation(); startTrip(${i})">▶ Iniciar trayecto</button>` + journeyStepsHTML(it);
             detail.style.display = 'block';
+            fillStepStops(it, detail);
             drawJourney(it);
         }
 
